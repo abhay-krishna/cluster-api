@@ -23,12 +23,15 @@ import (
 )
 
 // Format specifies the output format of the bootstrap data
-// +kubebuilder:validation:Enum=cloud-config
+// +kubebuilder:validation:Enum=cloud-config;bottlerocket
 type Format string
 
 const (
 	// CloudConfig make the bootstrap data to be of cloud-config format.
 	CloudConfig Format = "cloud-config"
+
+	// Bottlerocket make the bootstrap data to be of bottlerocket format.
+	Bottlerocket Format = "bottlerocket"
 )
 
 // KubeadmConfigSpec defines the desired state of KubeadmConfig.

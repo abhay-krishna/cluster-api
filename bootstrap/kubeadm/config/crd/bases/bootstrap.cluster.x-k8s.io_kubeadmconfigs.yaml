@@ -111,6 +111,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketBootstrap:
+                    description: |-
+                      BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   certificatesDir:
                     description: |-
                       CertificatesDir specifies where to store or look for all required certificates.
@@ -318,6 +334,36 @@ spec:
                           Defaults to a comma-delimited string of the Cluster object's spec.clusterNetwork.pods.cidrBlocks, or
                           to "10.96.0.0/12" if that's unset.
                         type: string
+                    type: object
+                  pause:
+                    description: |-
+                      Pause holds the image source for pause container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
+                  proxy:
+                    description: |-
+                      Proxy holds the https and no proxy information
+                      This is only for bottlerocket
+                    properties:
+                      httpsProxy:
+                        description: HTTPS proxy
+                        type: string
+                      noProxy:
+                        description: No proxy, list of ips that should not use proxy
+                        items:
+                          type: string
+                        type: array
                     type: object
                   scheduler:
                     description: Scheduler contains extra settings for the scheduler
@@ -670,6 +716,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketBootstrap:
+                    description: |-
+                      BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   caCertPath:
                     description: |-
                       CACertPath is the path to the SSL certificate authority used to
@@ -831,6 +893,36 @@ spec:
                           - effect
                           - key
                           type: object
+                        type: array
+                    type: object
+                  pause:
+                    description: |-
+                      Pause holds the image source for pause container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
+                  proxy:
+                    description: |-
+                      Proxy holds the https and no proxy information
+                      This is only for bottlerocket
+                    properties:
+                      httpsProxy:
+                        description: HTTPS proxy
+                        type: string
+                      noProxy:
+                        description: No proxy, list of ips that should not use proxy
+                        items:
+                          type: string
                         type: array
                     type: object
                 type: object
@@ -2232,6 +2324,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketBootstrap:
+                    description: |-
+                      BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   certificatesDir:
                     description: |-
                       certificatesDir specifies where to store or look for all required certificates.
@@ -2691,6 +2799,36 @@ spec:
                           to "10.96.0.0/12" if that's unset.
                         type: string
                     type: object
+                  pause:
+                    description: |-
+                      Pause holds the image source for pause container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
+                  proxy:
+                    description: |-
+                      Proxy holds the https and no proxy information
+                      This is only for bottlerocket
+                    properties:
+                      httpsProxy:
+                        description: HTTPS proxy
+                        type: string
+                      noProxy:
+                        description: No proxy, list of ips that should not use proxy
+                        items:
+                          type: string
+                        type: array
+                    type: object
                   scheduler:
                     description: scheduler contains extra settings for the scheduler
                       control plane component
@@ -3002,6 +3140,7 @@ spec:
                 enum:
                 - cloud-config
                 - ignition
+                - bottlerocket
                 type: string
               ignition:
                 description: ignition contains Ignition specific configuration.
@@ -3212,6 +3351,36 @@ spec:
                           by referencing a secret.
                         type: string
                     type: object
+                  pause:
+                    description: |-
+                      Pause holds the image source for pause container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
+                  proxy:
+                    description: |-
+                      Proxy holds the https and no proxy information
+                      This is only for bottlerocket
+                    properties:
+                      httpsProxy:
+                        description: HTTPS proxy
+                        type: string
+                      noProxy:
+                        description: No proxy, list of ips that should not use proxy
+                        items:
+                          type: string
+                        type: array
+                    type: object
                   skipPhases:
                     description: |-
                       skipPhases is a list of phases to skip during command execution.
@@ -3232,6 +3401,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketBootstrap:
+                    description: |-
+                      BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   caCertPath:
                     description: |-
                       caCertPath is the path to the SSL certificate authority used to

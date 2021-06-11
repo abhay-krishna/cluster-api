@@ -27,7 +27,7 @@ import (
 )
 
 // Format specifies the output format of the bootstrap data
-// +kubebuilder:validation:Enum=cloud-config;ignition
+// +kubebuilder:validation:Enum=cloud-config;ignition;bottlerocket
 type Format string
 
 const (
@@ -36,6 +36,9 @@ const (
 
 	// Ignition make the bootstrap data to be of Ignition format.
 	Ignition Format = "ignition"
+
+	// Bottlerocket make the bootstrap data to be of bottlerocket format.
+	Bottlerocket Format = "bottlerocket"
 )
 
 var (

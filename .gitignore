@@ -9,7 +9,7 @@ hack/tools/bin
 
 # Test binary, build with `go test -c`
 *.test
-
+patches
 # E2E test templates
 test/e2e/data/infrastructure-docker/**/cluster-template*.yaml
 !test/e2e/data/infrastructure-docker/**/clusterclass-quick-start.yaml

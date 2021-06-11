@@ -41,6 +41,7 @@ import (
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
+	"sigs.k8s.io/cluster-api/bootstrap/kubeadm/internal/bottlerocket"
 	"sigs.k8s.io/cluster-api/bootstrap/kubeadm/internal/cloudinit"
 	"sigs.k8s.io/cluster-api/bootstrap/kubeadm/internal/ignition"
 	"sigs.k8s.io/cluster-api/bootstrap/kubeadm/internal/locking"
@@ -439,6 +440,46 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 	// injects into config.ClusterConfiguration values from top level object
 	r.reconcileTopLevelObjectSettings(ctx, scope.Cluster, machine, scope.Config)
 
+	// Add extra config to cluster config for bottlerocket
+	// Extract bottlerocket config from kubeadm
+	var bottlerocketConfig *bottlerocket.BottlerocketConfig
+	if scope.Config.Spec.Format == bootstrapv1.Bottlerocket {
+		// Add certificates dir
+		if scope.Config.Spec.ClusterConfiguration.CertificatesDir == "" {
+			scope.Config.Spec.ClusterConfiguration.CertificatesDir = "/var/lib/kubeadm/pki"
+		}
+
+		// Add controllerManager extra volumes
+		scope.Config.Spec.ClusterConfiguration.ControllerManager.ExtraVolumes = []bootstrapv1.HostPathMount{
+			{
+				Name:      "kubeconfig",
+				HostPath:  "/var/lib/kubeadm/controller-manager.conf",
+				MountPath: "/etc/kubernetes/controller-manager.conf",
+				ReadOnly:  true,
+				PathType:  "File",
+			},
+		}
+
+		// Add scheduler extraVol
+		scope.Config.Spec.ClusterConfiguration.Scheduler.ExtraVolumes = []bootstrapv1.HostPathMount{
+			{
+				Name:      "kubeconfig",
+				HostPath:  "/var/lib/kubeadm/scheduler.conf",
+				MountPath: "/etc/kubernetes/scheduler.conf",
+				ReadOnly:  true,
+				PathType:  "File",
+			},
+		}
+
+		bottlerocketConfig = &bottlerocket.BottlerocketConfig{
+			Pause:                 scope.Config.Spec.ClusterConfiguration.Pause,
+			BottlerocketBootstrap: scope.Config.Spec.ClusterConfiguration.BottlerocketBootstrap,
+		}
+		if scope.Config.Spec.ClusterConfiguration.Proxy.HTTPSProxy != "" {
+			bottlerocketConfig.ProxyConfiguration = scope.Config.Spec.ClusterConfiguration.Proxy
+		}
+	}
+
 	clusterdata, err := kubeadmtypes.MarshalClusterConfigurationForVersion(scope.Config.Spec.ClusterConfiguration, parsedVersion)
 	if err != nil {
 		scope.Error(err, "Failed to marshal cluster configuration")
@@ -510,6 +551,12 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 			ControlPlaneInput: controlPlaneInput,
 			Ignition:          scope.Config.Spec.Ignition,
 		})
+	case bootstrapv1.Bottlerocket:
+		bootstrapInitData, err = bottlerocket.NewInitControlPlane(controlPlaneInput, bottlerocketConfig)
+		if err != nil {
+			scope.Error(err, "Failed to generate cloud init for bottlerocket bootstrap control plane")
+			return ctrl.Result{}, err
+		}
 	default:
 		bootstrapInitData, err = cloudinit.NewInitControlPlane(controlPlaneInput)
 	}
@@ -618,6 +665,19 @@ func (r *KubeadmConfigReconciler) joinWorker(ctx context.Context, scope *Scope) 
 			NodeInput: nodeInput,
 			Ignition:  scope.Config.Spec.Ignition,
 		})
+	case bootstrapv1.Bottlerocket:
+		bottlerocketConfig := &bottlerocket.BottlerocketConfig{
+			Pause:                 scope.Config.Spec.JoinConfiguration.Pause,
+			BottlerocketBootstrap: scope.Config.Spec.JoinConfiguration.BottlerocketBootstrap,
+		}
+		if scope.Config.Spec.JoinConfiguration.Proxy.HTTPSProxy != "" {
+			bottlerocketConfig.ProxyConfiguration = scope.Config.Spec.JoinConfiguration.Proxy
+		}
+		bootstrapJoinData, err = bottlerocket.NewNode(nodeInput, bottlerocketConfig)
+		if err != nil {
+			scope.Error(err, "Failed to create a worker bottlerocket join configuration")
+			return ctrl.Result{}, err
+		}
 	default:
 		bootstrapJoinData, err = cloudinit.NewNode(nodeInput)
 	}
@@ -722,6 +782,19 @@ func (r *KubeadmConfigReconciler) joinControlplane(ctx context.Context, scope *S
 			ControlPlaneJoinInput: controlPlaneJoinInput,
 			Ignition:              scope.Config.Spec.Ignition,
 		})
+	case bootstrapv1.Bottlerocket:
+		bottlerocketConfig := &bottlerocket.BottlerocketConfig{
+			Pause:                 scope.Config.Spec.JoinConfiguration.Pause,
+			BottlerocketBootstrap: scope.Config.Spec.JoinConfiguration.BottlerocketBootstrap,
+		}
+		if scope.Config.Spec.JoinConfiguration.Proxy.HTTPSProxy != "" {
+			bottlerocketConfig.ProxyConfiguration = scope.Config.Spec.JoinConfiguration.Proxy
+		}
+		bootstrapJoinData, err = bottlerocket.NewJoinControlPlane(controlPlaneJoinInput, bottlerocketConfig)
+		if err != nil {
+			scope.Error(err, "Failed to generate cloud init for bottlerocket bootstrap control plane")
+			return ctrl.Result{}, err
+		}
 	default:
 		bootstrapJoinData, err = cloudinit.NewJoinControlPlane(controlPlaneJoinInput)
 	}

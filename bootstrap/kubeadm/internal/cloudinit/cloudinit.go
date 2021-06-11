@@ -59,8 +59,8 @@ type BaseUserData struct {
 }
 
 func (input *BaseUserData) prepare() error {
-	input.Header = cloudConfigHeader
 	input.WriteFiles = append(input.WriteFiles, input.AdditionalFiles...)
+	input.Header = cloudConfigHeader
 	input.KubeadmCommand = fmt.Sprintf(standardJoinCommand, input.KubeadmVerbosity)
 	if input.UseExperimentalRetry {
 		input.KubeadmCommand = retriableJoinScriptName

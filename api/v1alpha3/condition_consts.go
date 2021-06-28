@@ -174,7 +174,6 @@ const (
 )
 
 // Conditions and condition Reasons for the MachineHealthCheck object.
-
 const (
 	// RemediationAllowedCondition is set on MachineHealthChecks to show the status of whether the MachineHealthCheck is
 	// allowed to remediate any Machines or whether it is blocked from remediating any further.
@@ -183,4 +182,20 @@ const (
 	// TooManyUnhealthyReason is the reason used when too many Machines are unhealthy and the MachineHealthCheck is blocked
 	// from making any further remediations.
 	TooManyUnhealthyReason = "TooManyUnhealthy"
+)
+
+// Conditions used by the Etcd provider objects
+const (
+	// ManagedExternalEtcdClusterInitializedCondition is set once the first member of an etcd cluster is provisioned and running
+	ManagedExternalEtcdClusterInitializedCondition ConditionType = "ManagedEtcdInitialized"
+
+	// ManagedExternalEtcdClusterReadyCondition indicates if the etcd cluster is ready and all members have passed healthchecks.
+	ManagedExternalEtcdClusterReadyCondition ConditionType = "ManagedEtcdReady"
+
+	// WaitingForEtcdClusterInitializedReason (Severity=Info) documents a cluster waiting for the etcd cluster
+	// to report successful etcd cluster initialization.
+	WaitingForEtcdClusterInitializedReason = "WaitingForEtcdClusterProviderInitialized"
+
+	// EtcdHealthCheckFailedReason (Severity=Error) documents that healthcheck on an etcd member failed
+	EtcdHealthCheckFailedReason = "EtcdMemberHealthCheckFailed"
 )

@@ -55,6 +55,11 @@ type ClusterSpec struct {
 	// +optional
 	ControlPlaneRef *corev1.ObjectReference `json:"controlPlaneRef,omitempty"`
 
+	// ManagedExternalEtcdRef is an optional reference to an etcd provider resource that holds details
+	// for provisioning an external etcd cluster
+	// +optional
+	ManagedExternalEtcdRef *corev1.ObjectReference `json:"managedExternalEtcdRef,omitempty"`
+
 	// InfrastructureRef is a reference to a provider-specific resource that holds the details
 	// for provisioning infrastructure for a cluster in said provider.
 	// +optional
@@ -146,6 +151,15 @@ type ClusterStatus struct {
 	// ObservedGeneration is the latest generation observed by the controller.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// ManagedExternalEtcdInitialized indicates that first etcd member's IP address is set by machine controller,
+	// so remaining etcd members can lookup the address to join the cluster
+	// +optional
+	ManagedExternalEtcdInitialized bool `json:"managedExternalEtcdInitialized"`
+
+	// ManagedExternalEtcdReady indicates external etcd cluster is fully provisioned
+	// +optional
+	ManagedExternalEtcdReady bool `json:"managedExternalEtcdReady"`
 }
 
 // ANCHOR_END: ClusterStatus

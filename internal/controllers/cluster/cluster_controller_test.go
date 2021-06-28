@@ -534,6 +534,125 @@ func TestClusterReconcilerNodeRef(t *testing.T) {
 	})
 }
 
+func TestClusterReconcilerEtcdMachineToCluster(t *testing.T) {
+	t.Run("machine to cluster", func(t *testing.T) {
+		clusterEtcdNotInitialized := &clusterv1.Cluster{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Cluster",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "test",
+			},
+			Spec:   clusterv1.ClusterSpec{},
+			Status: clusterv1.ClusterStatus{},
+		}
+		clusterEtcdInitialized := &clusterv1.Cluster{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Cluster",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster-etcd-init",
+				Namespace: "test",
+			},
+			Spec:   clusterv1.ClusterSpec{},
+			Status: clusterv1.ClusterStatus{ManagedExternalEtcdInitialized: true},
+		}
+		etcdMachineWithAddress := &clusterv1.Machine{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Machine",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "etcdWithAddress",
+				Namespace: "test",
+				Labels: map[string]string{
+					clusterv1.ClusterLabelName:            clusterEtcdNotInitialized.Name,
+					clusterv1.MachineEtcdClusterLabelName: "",
+				},
+			},
+			Spec: clusterv1.MachineSpec{
+				ClusterName: "test-cluster",
+			},
+			Status: clusterv1.MachineStatus{
+				Addresses: clusterv1.MachineAddresses{clusterv1.MachineAddress{Type: clusterv1.MachineExternalIP, Address: "test"}},
+			},
+		}
+		etcdMachineNoAddress := &clusterv1.Machine{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Machine",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "etcdNoAddress",
+				Namespace: "test",
+				Labels: map[string]string{
+					clusterv1.ClusterLabelName:            clusterEtcdNotInitialized.Name,
+					clusterv1.MachineEtcdClusterLabelName: "",
+				},
+			},
+			Spec: clusterv1.MachineSpec{
+				ClusterName: "test-cluster",
+			},
+			Status: clusterv1.MachineStatus{},
+		}
+		etcdMachineNoAddressForInitializedCluster := &clusterv1.Machine{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Machine",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "etcdNoAddressClusterEtcdInitialized",
+				Namespace: "test",
+				Labels: map[string]string{
+					clusterv1.ClusterLabelName:            clusterEtcdInitialized.Name,
+					clusterv1.MachineEtcdClusterLabelName: "",
+				},
+			},
+			Spec: clusterv1.MachineSpec{
+				ClusterName: "test-cluster-etcd-init",
+			},
+			Status: clusterv1.MachineStatus{},
+		}
+
+		tests := []struct {
+			name string
+			o    client.Object
+			want []ctrl.Request
+		}{
+			{
+				name: "etcd machine, address is set, should return cluster",
+				o:    etcdMachineWithAddress,
+				want: []ctrl.Request{
+					{
+						NamespacedName: util.ObjectKey(clusterEtcdNotInitialized),
+					},
+				},
+			},
+			{
+				name: "etcd machine, address is not set, should not return cluster",
+				o:    etcdMachineNoAddress,
+				want: nil,
+			},
+			{
+				name: "etcd machine, address is not set, but etcd is initialized, should not return cluster",
+				o:    etcdMachineNoAddressForInitializedCluster,
+				want: nil,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				g := NewWithT(t)
+
+				r := &Reconciler{
+					Client: fake.NewClientBuilder().WithObjects(clusterEtcdNotInitialized, clusterEtcdInitialized, etcdMachineNoAddress, etcdMachineWithAddress, etcdMachineNoAddressForInitializedCluster).Build(),
+				}
+
+				requests := r.etcdMachineToCluster(tt.o)
+				g.Expect(requests).To(Equal(tt.want))
+			})
+		}
+	})
+
+}
+
 type machineDeploymentBuilder struct {
 	md clusterv1.MachineDeployment
 }
@@ -613,6 +732,11 @@ func (b *machineBuilder) controlPlane() *machineBuilder {
 	return b
 }
 
+func (b *machineBuilder) etcd() *machineBuilder {
+	b.m.Labels = map[string]string{clusterv1.MachineEtcdClusterLabelName: ""}
+	return b
+}
+
 func (b *machineBuilder) build() clusterv1.Machine {
 	return b.m
 }
@@ -679,6 +803,9 @@ func TestFilterOwnedDescendants(t *testing.T) {
 	mp3NotOwnedByCluster := newMachinePoolBuilder().named("mp3").build()
 	mp4OwnedByCluster := newMachinePoolBuilder().named("mp4").ownedBy(&c).build()
 
+	me1EtcdOwnedByCluster := newMachineBuilder().named("me1").ownedBy(&c).etcd().build()
+	me2EtcdNotOwnedByCluster := newMachineBuilder().named("me2").build()
+
 	d := clusterDescendants{
 		machineDeployments: clusterv1.MachineDeploymentList{
 			Items: []clusterv1.MachineDeployment{
@@ -718,6 +845,12 @@ func TestFilterOwnedDescendants(t *testing.T) {
 				mp4OwnedByCluster,
 			},
 		},
+		etcdMachines: clusterv1.MachineList{
+			Items: []clusterv1.Machine{
+				me1EtcdOwnedByCluster,
+				me2EtcdNotOwnedByCluster,
+			},
+		},
 	}
 
 	actual, err := d.filterOwnedDescendants(&c)
@@ -734,6 +867,7 @@ func TestFilterOwnedDescendants(t *testing.T) {
 		&m5OwnedByCluster,
 		&m3ControlPlaneOwnedByCluster,
 		&m6ControlPlaneOwnedByCluster,
+		&me1EtcdOwnedByCluster,
 	}
 
 	g.Expect(actual).To(Equal(expected))

@@ -6,8 +6,6 @@
 package bottlerocket
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"sigs.k8s.io/cluster-api/bootstrap/kubeadm/internal/cloudinit"
 )

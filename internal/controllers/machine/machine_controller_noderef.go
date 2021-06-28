@@ -51,6 +51,11 @@ func (r *Reconciler) reconcileNode(ctx context.Context, cluster *clusterv1.Clust
 		return ctrl.Result{}, nil
 	}
 
+	if _, ok := machine.Labels[clusterv1.MachineEtcdClusterLabelName]; ok {
+		// Etcd member Machines do not correspond to Kubernetes v1 Nodes; cannot get k8s node to set nodeRef
+		return ctrl.Result{}, nil
+	}
+	
 	providerID, err := noderefutil.NewProviderID(*machine.Spec.ProviderID)
 	if err != nil {
 		return ctrl.Result{}, err

@@ -360,23 +360,27 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	// set to true after a control plane machine has a node ref. If we would requeue here in this case, the
 	// Machine will never get a node ref as ProviderID is required to set the node ref, so we would get a deadlock.
 	if cluster.Spec.ControlPlaneRef != nil &&
-		!conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) {
+		!conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) &&
+		!isEtcdMachine(machine) {
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 
-	// Usually a cloud provider will do this, but there is no docker-cloud provider.
-	// Requeue if there is an error, as this is likely momentary load balancer
-	// state changes during control plane provisioning.
-	remoteClient, err := r.Tracker.GetClient(ctx, client.ObjectKeyFromObject(cluster))
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to generate workload cluster client")
-	}
-	if err := externalMachine.SetNodeProviderID(ctx, remoteClient); err != nil {
-		if errors.As(err, &docker.ContainerNotRunningError{}) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to patch the Kubernetes node with the machine providerID")
+	// In case of an etcd cluster, there is no concept of kubernetes node. So we can generate the node Provider ID and set it on machine spec directly
+	if !isEtcdMachine(machine) {
+		// Usually a cloud provider will do this, but there is no docker-cloud provider.
+		// Requeue if there is an error, as this is likely momentary load balancer
+		// state changes during control plane provisioning.
+		remoteClient, err := r.Tracker.GetClient(ctx, client.ObjectKeyFromObject(cluster))
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to generate workload cluster client")
 		}
-		log.Error(err, "failed to patch the Kubernetes node with the machine providerID")
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		if err := externalMachine.SetNodeProviderID(ctx, remoteClient); err != nil {
+			if errors.As(err, &docker.ContainerNotRunningError{}) {
+				return ctrl.Result{}, errors.Wrap(err, "failed to patch the Kubernetes node with the machine providerID")
+			}
+			log.Error(err, "failed to patch the Kubernetes node with the machine providerID")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 	}
 	// Set ProviderID so the Cluster API Machine Controller can pull it
 	providerID := externalMachine.ProviderID()
@@ -529,4 +533,9 @@ func setMachineAddress(ctx context.Context, dockerMachine *infrav1.DockerMachine
 		},
 	}
 	return nil
+}
+
+func isEtcdMachine(machine *clusterv1.Machine) bool {
+	_, ok := machine.Labels[clusterv1.MachineEtcdClusterLabelName]
+	return ok
 }

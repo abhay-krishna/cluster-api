@@ -146,6 +146,12 @@ func IsNodeReady(node *corev1.Node) bool {
 	return false
 }
 
+// IsEtcdMachine checks if machine is an etcd machine.
+func IsEtcdMachine(machine *clusterv1.Machine) bool {
+	_, ok := machine.ObjectMeta.Labels[clusterv1.MachineEtcdClusterLabelName]
+	return ok
+}
+
 // GetClusterFromMetadata returns the Cluster object (if present) using the object metadata.
 func GetClusterFromMetadata(ctx context.Context, c client.Client, obj metav1.ObjectMeta) (*clusterv1.Cluster, error) {
 	if obj.Labels[clusterv1.ClusterNameLabel] == "" {

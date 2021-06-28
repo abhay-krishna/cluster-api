@@ -145,6 +145,7 @@ func (in *KubeadmControlPlane) ValidateUpdate(old runtime.Object) (admission.War
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "imageTag"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "extraArgs"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "extraArgs", "*"},
+		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "external", "endpoints"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "dns", "imageRepository"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "dns", "imageTag"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "imageRepository"},

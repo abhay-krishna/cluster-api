@@ -427,6 +427,9 @@ func (c Certificates) AsFiles() []bootstrapv1.File {
 	if serviceAccountKey := c.GetByPurpose(ServiceAccount); serviceAccountKey != nil {
 		certFiles = append(certFiles, serviceAccountKey.AsFiles()...)
 	}
+	if managedEtcdCACertKey := c.GetByPurpose(ManagedExternalEtcdCA); managedEtcdCACertKey != nil {
+		certFiles = append(certFiles, managedEtcdCACertKey.AsFiles()...)
+	}
 
 	// these will only exist if external etcd was defined and supplied by the user
 	if apiserverEtcdClientCert := c.GetByPurpose(APIServerEtcdClient); apiserverEtcdClientCert != nil {

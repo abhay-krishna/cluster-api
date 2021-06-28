@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controllers/external"
@@ -59,7 +60,7 @@ const (
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io;bootstrap.cluster.x-k8s.io;controlplane.cluster.x-k8s.io,resources=*,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io;bootstrap.cluster.x-k8s.io;controlplane.cluster.x-k8s.io;etcdcluster.cluster.x-k8s.io,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status;clusters/finalizers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
 
@@ -89,6 +90,15 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, opt
 
 	if err != nil {
 		return errors.Wrap(err, "failed setting up with a controller manager")
+	}
+
+	err = c.Watch(
+		source.Kind(mgr.GetCache(), &clusterv1.Machine{}),
+		handler.EnqueueRequestsFromMapFunc(r.etcdMachineToCluster),
+	)
+
+	if err != nil {
+		return errors.Wrap(err, "failed adding Watch for Clusters on etcd machines to controller manager")
 	}
 
 	r.recorder = mgr.GetEventRecorderFor("cluster-controller")
@@ -164,6 +174,7 @@ func patchCluster(ctx context.Context, patchHelper *patch.Helper, cluster *clust
 		conditions.WithConditions(
 			clusterv1.ControlPlaneReadyCondition,
 			clusterv1.InfrastructureReadyCondition,
+			clusterv1.ManagedExternalEtcdClusterReadyCondition,
 		),
 	)
 
@@ -175,6 +186,7 @@ func patchCluster(ctx context.Context, patchHelper *patch.Helper, cluster *clust
 			clusterv1.ReadyCondition,
 			clusterv1.ControlPlaneReadyCondition,
 			clusterv1.InfrastructureReadyCondition,
+			clusterv1.ManagedExternalEtcdClusterReadyCondition,
 		}},
 	)
 	return patchHelper.Patch(ctx, cluster, options...)
@@ -197,6 +209,7 @@ func (r *Reconciler) reconcile(ctx context.Context, cluster *clusterv1.Cluster) 
 		r.reconcileControlPlane,
 		r.reconcileKubeconfig,
 		r.reconcileControlPlaneInitialized,
+		r.reconcileEtcdCluster,
 	}
 
 	res := ctrl.Result{}
@@ -302,6 +315,37 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, cluster *clusterv1.Clu
 		}
 	}
 
+	if cluster.Spec.ManagedExternalEtcdRef != nil {
+		obj, err := external.Get(ctx, r.Client, cluster.Spec.ManagedExternalEtcdRef, cluster.Namespace)
+		switch {
+		case apierrors.IsNotFound(errors.Cause(err)):
+			// Etcd cluster has been deleted
+			conditions.MarkFalse(cluster, clusterv1.ManagedExternalEtcdClusterReadyCondition, clusterv1.DeletedReason, clusterv1.ConditionSeverityInfo, "")
+		case err != nil:
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get %s %q for Cluster %s/%s",
+				path.Join(cluster.Spec.ManagedExternalEtcdRef.APIVersion, cluster.Spec.ManagedExternalEtcdRef.Kind),
+				cluster.Spec.ManagedExternalEtcdRef.Name, cluster.Namespace, cluster.Name)
+		default:
+			// Report a summary of current status of the external etcd object defined for this cluster.
+			conditions.SetMirror(cluster, clusterv1.ManagedExternalEtcdClusterReadyCondition,
+				conditions.UnstructuredGetter(obj),
+				conditions.WithFallbackValue(false, clusterv1.DeletingReason, clusterv1.ConditionSeverityInfo, ""),
+			)
+
+			// Issue a deletion request for the infrastructure object.
+			// Once it's been deleted, the cluster will get processed again.
+			if err := r.Client.Delete(ctx, obj); err != nil {
+				return ctrl.Result{}, errors.Wrapf(err,
+					"failed to delete %v %q for Cluster %q in namespace %q",
+					obj.GroupVersionKind(), obj.GetName(), cluster.Name, cluster.Namespace)
+			}
+
+			// Return here so we don't remove the finalizer yet.
+			log.Info("Cluster still has descendants - need to requeue", "managedExternalEtcdRef", cluster.Spec.ManagedExternalEtcdRef.Name)
+			return ctrl.Result{}, nil
+		}
+	}
+
 	if cluster.Spec.InfrastructureRef != nil {
 		obj, err := external.Get(ctx, r.UnstructuredCachingClient, cluster.Spec.InfrastructureRef, cluster.Namespace)
 		switch {
@@ -344,6 +388,7 @@ type clusterDescendants struct {
 	controlPlaneMachines clusterv1.MachineList
 	workerMachines       clusterv1.MachineList
 	machinePools         expv1.MachinePoolList
+	etcdMachines         clusterv1.MachineList
 }
 
 // length returns the number of descendants.
@@ -363,6 +408,13 @@ func (c *clusterDescendants) descendantNames() string {
 	}
 	if len(controlPlaneMachineNames) > 0 {
 		descendants = append(descendants, "Control plane machines: "+strings.Join(controlPlaneMachineNames, ","))
+	}
+	etcdMachines := make([]string, len(c.etcdMachines.Items))
+	for i, etcdMachine := range c.etcdMachines.Items {
+		etcdMachines[i] = etcdMachine.Name
+	}
+	if len(etcdMachines) > 0 {
+		descendants = append(descendants, "Etcd machines: "+strings.Join(etcdMachines, ","))
 	}
 	machineDeploymentNames := make([]string, len(c.machineDeployments.Items))
 	for i, machineDeployment := range c.machineDeployments.Items {
@@ -427,7 +479,8 @@ func (r *Reconciler) listDescendants(ctx context.Context, cluster *clusterv1.Clu
 	// Split machines into control plane and worker machines so we make sure we delete control plane machines last
 	machineCollection := collections.FromMachineList(&machines)
 	controlPlaneMachines := machineCollection.Filter(collections.ControlPlaneMachines(cluster.Name))
-	workerMachines := machineCollection.Difference(controlPlaneMachines)
+	etcdMachines := machineCollection.Filter(collections.EtcdMachines(cluster.Name))
+	workerMachines := machineCollection.Difference(controlPlaneMachines).Difference(etcdMachines)
 	descendants.workerMachines = collections.ToMachineList(workerMachines)
 	// Only count control plane machines as descendants if there is no control plane provider.
 	if cluster.Spec.ControlPlaneRef == nil {
@@ -460,6 +513,9 @@ func (c clusterDescendants) filterOwnedDescendants(cluster *clusterv1.Cluster) (
 		&c.machineSets,
 		&c.workerMachines,
 		&c.controlPlaneMachines,
+	}
+	if cluster.Spec.ManagedExternalEtcdRef != nil {
+		lists = append(lists, &c.etcdMachines)
 	}
 	if feature.Gates.Enabled(feature.MachinePool) {
 		lists = append([]client.ObjectList{&c.machinePools}, lists...)
@@ -529,6 +585,36 @@ func (r *Reconciler) controlPlaneMachineToCluster(ctx context.Context, o client.
 	}
 
 	if conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) {
+		return nil
+	}
+
+	return []ctrl.Request{{
+		NamespacedName: util.ObjectKey(cluster),
+	}}
+}
+
+// etcdMachineToCluster is a handler.ToRequestsFunc to be used to enqueue requests for reconciliation
+// for Cluster to update its status.ManagedExternalEtcdInitialized field
+func (r *Reconciler) etcdMachineToCluster(ctx context.Context, o client.Object) []ctrl.Request {
+	m, ok := o.(*clusterv1.Machine)
+	if !ok {
+		panic(fmt.Sprintf("Expected a Machine but got a %T", o))
+	}
+	if !util.IsEtcdMachine(m) {
+		return nil
+	}
+	// address has not been set, so ManagedExternalEtcdInitialized would not be true
+	if len(m.Status.Addresses) == 0 {
+		return nil
+	}
+
+	cluster, err := util.GetClusterByName(context.TODO(), r.Client, m.Namespace, m.Spec.ClusterName)
+	if err != nil {
+		return nil
+	}
+
+	if cluster.Status.ManagedExternalEtcdInitialized {
+		// no need to enqueue cluster for reconcile based on machine changes
 		return nil
 	}
 

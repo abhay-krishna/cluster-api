@@ -48,6 +48,8 @@ const (
 
 	// APIServerEtcdClient is the secret name of user-supplied secret containing the apiserver-etcd-client key/cert.
 	APIServerEtcdClient = Purpose("apiserver-etcd-client")
+
+	ManagedExternalEtcdCA = Purpose("managed-etcd")
 )
 
 var (

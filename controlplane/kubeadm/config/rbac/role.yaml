@@ -79,3 +79,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - etcdcluster.cluster.x-k8s.io
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - update
+  - watch

@@ -251,3 +251,19 @@ const (
 	// ScalingDownReason (Severity=Info) documents a MachineSet is decreasing the number of replicas.
 	ScalingDownReason = "ScalingDown"
 )
+
+// Conditions used by the Etcd provider objects
+const (
+	// ManagedExternalEtcdClusterInitializedCondition is set once the first member of an etcd cluster is provisioned and running
+	ManagedExternalEtcdClusterInitializedCondition ConditionType = "ManagedEtcdInitialized"
+
+	// ManagedExternalEtcdClusterReadyCondition indicates if the etcd cluster is ready and all members have passed healthchecks.
+	ManagedExternalEtcdClusterReadyCondition ConditionType = "ManagedEtcdReady"
+
+	// WaitingForEtcdClusterInitializedReason (Severity=Info) documents a cluster waiting for the etcd cluster
+	// to report successful etcd cluster initialization.
+	WaitingForEtcdClusterInitializedReason = "WaitingForEtcdClusterProviderInitialized"
+
+	// EtcdHealthCheckFailedReason (Severity=Error) documents that healthcheck on an etcd member failed
+	EtcdHealthCheckFailedReason = "EtcdMemberHealthCheckFailed"
+)

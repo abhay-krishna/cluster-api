@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/cluster-api/controllers/external"
 	capierrors "sigs.k8s.io/cluster-api/errors"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	utilconversion "sigs.k8s.io/cluster-api/util/conversion"
 	"sigs.k8s.io/cluster-api/util/kubeconfig"
@@ -260,6 +261,39 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context, s *scope) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
+	if cluster.Spec.ManagedExternalEtcdRef != nil {
+		// check if the referenced etcd cluster is ready or not
+		etcdRef := cluster.Spec.ManagedExternalEtcdRef
+		externalEtcd, err := external.Get(ctx, r.Client, etcdRef)
+		if err != nil {
+			if apierrors.IsNotFound(errors.Cause(err)) {
+				log.Info("Could not find external object for cluster, requeuing", "refGroupVersionKind", etcdRef.GroupVersionKind(), "refName", etcdRef.Name)
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			}
+			return ctrl.Result{}, err
+		}
+		externalEtcdReady, err := external.IsReady(externalEtcd)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !externalEtcdReady {
+			// External Etcd Cluster has not been created, pause control plane provisioning by setting the paused annotation on the Control plane object
+			controlPlane, err := external.Get(ctx, r.Client, cluster.Spec.ControlPlaneRef)
+			if err != nil {
+				if apierrors.IsNotFound(errors.Cause(err)) {
+					log.Info("Could not find control plane for cluster, requeuing", "refGroupVersionKind", cluster.Spec.ControlPlaneRef.GroupVersionKind(), "refName", cluster.Spec.ControlPlaneRef.Name)
+					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+				}
+				return ctrl.Result{}, err
+			}
+			annotations.AddAnnotations(controlPlane, map[string]string{clusterv1.PausedAnnotation: "true"})
+			if err := r.Client.Update(ctx, controlPlane, &client.UpdateOptions{}); err != nil {
+				log.Error(err, "error pausing control plane")
+				return ctrl.Result{Requeue: true}, err
+			}
+		}
+	}
+
 	// Call generic external reconciler.
 	obj, err := r.reconcileExternal(ctx, cluster, cluster.Spec.ControlPlaneRef)
 	if err != nil {
@@ -340,6 +374,77 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context, s *scope) (ctrl.
 	}
 	cluster.Status.ControlPlaneReady = true
 
+	return ctrl.Result{}, nil
+}
+
+func (r *Reconciler) reconcileEtcdCluster(ctx context.Context, cluster *clusterv1.Cluster) (ctrl.Result, error) {
+	log := ctrl.LoggerFrom(ctx)
+
+	if cluster.Spec.ManagedExternalEtcdRef == nil {
+		return ctrl.Result{}, nil
+	}
+	// Call generic external reconciler.
+	obj, err := r.reconcileExternal(ctx, cluster, cluster.Spec.ManagedExternalEtcdRef)
+	etcdPlaneReconcileResult := external.ReconcileOutput{Result: obj}
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	// Return early if we need to requeue.
+	if etcdPlaneReconcileResult.RequeueAfter > 0 {
+		return ctrl.Result{RequeueAfter: etcdPlaneReconcileResult.RequeueAfter}, nil
+	}
+
+	etcdPlaneConfig := etcdPlaneReconcileResult.Result
+
+	// There's no need to go any further if the etcd cluster resource is marked for deletion.
+	if !etcdPlaneConfig.GetDeletionTimestamp().IsZero() {
+		return ctrl.Result{}, nil
+	}
+
+	// Determine if the etcd cluster is ready.
+	ready, err := external.IsReady(etcdPlaneConfig)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	cluster.Status.ManagedExternalEtcdReady = ready
+
+	if ready {
+		// resume control plane
+		controlPlane, err := external.Get(ctx, r.Client, cluster.Spec.ControlPlaneRef)
+		if err != nil {
+			if apierrors.IsNotFound(errors.Cause(err)) {
+				log.Info("Could not find control plane for cluster, requeuing", "refGroupVersionKind", cluster.Spec.ControlPlaneRef.GroupVersionKind(), "refName", cluster.Spec.ControlPlaneRef.Name)
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			}
+			return ctrl.Result{}, err
+		}
+		unstructured.RemoveNestedField(controlPlane.Object, "metadata", "annotations", clusterv1.PausedAnnotation)
+		if err := r.Client.Update(ctx, controlPlane, &client.UpdateOptions{}); err != nil {
+			log.Error(err, "error resuming control plane")
+			return ctrl.Result{Requeue: true}, err
+		}
+	}
+
+	// Report a summary of current status of the etcd cluster object defined for this cluster.
+	conditions.SetMirror(cluster, clusterv1.ManagedExternalEtcdClusterReadyCondition,
+		conditions.UnstructuredGetter(etcdPlaneConfig),
+		conditions.WithFallbackValue(ready, clusterv1.WaitingForEtcdClusterInitializedReason, clusterv1.ConditionSeverityInfo, ""),
+	)
+
+	// Update cluster.Status.ManagedExternalEtcdClusterInitializedCondition if it hasn't already been set
+	if !conditions.IsTrue(cluster, clusterv1.ManagedExternalEtcdClusterInitializedCondition) {
+		initialized, err := external.IsInitialized(etcdPlaneConfig)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if initialized {
+			log.Info("reconcileEtcdCluster: Marking etcd cluster initialized setting it to true")
+			cluster.Status.ManagedExternalEtcdInitialized = true
+			conditions.MarkTrue(cluster, clusterv1.ManagedExternalEtcdClusterInitializedCondition)
+		} else {
+			conditions.MarkFalse(cluster, clusterv1.ManagedExternalEtcdClusterInitializedCondition, clusterv1.WaitingForEtcdClusterInitializedReason, clusterv1.ConditionSeverityInfo, "Waiting for etcd cluster provider to indicate the etcd has been initialized")
+		}
+	}
 	return ctrl.Result{}, nil
 }
 

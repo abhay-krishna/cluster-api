@@ -796,6 +796,13 @@ func setMachinePhaseAndLastUpdated(_ context.Context, m *clusterv1.Machine) {
 		m.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
 	}
 
+	if _, ok := m.Labels[clusterv1.MachineEtcdClusterLabelName]; ok {
+		// Status.NodeRef does not get set for etcd machines since they don't correspond to k8s node objects
+		if m.Status.InfrastructureReady {
+			m.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
+		}
+	}
+
 	// Set the phase to "failed" if any of Status.FailureReason or Status.FailureMessage is not-nil.
 	if m.Status.FailureReason != nil || m.Status.FailureMessage != nil {
 		m.Status.SetTypedPhase(clusterv1.MachinePhaseFailed)

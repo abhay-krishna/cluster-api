@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -43,6 +44,7 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controllers/clustercache"
+	"sigs.k8s.io/cluster-api/controllers/external"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controlplane/kubeadm/internal"
 	expv1 "sigs.k8s.io/cluster-api/exp/api/v1beta1"
@@ -74,6 +76,7 @@ const (
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines;machines/status,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machinepools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=etcdcluster.cluster.x-k8s.io,resources=*,verbs=get;list;watch;update
 
 // KubeadmControlPlaneReconciler reconciles a KubeadmControlPlane object.
 type KubeadmControlPlaneReconciler struct {
@@ -198,6 +201,31 @@ func (r *KubeadmControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.
 	if err != nil {
 		log.Error(err, "Failed to configure the patch helper")
 		return ctrl.Result{Requeue: true}, nil
+	}
+	if cluster.Spec.ManagedExternalEtcdRef != nil {
+		etcdRef := cluster.Spec.ManagedExternalEtcdRef
+		externalEtcd, err := external.Get(ctx, r.Client, etcdRef, cluster.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		endpoints, found, err := external.GetExternalEtcdEndpoints(externalEtcd)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get endpoint field from %v", externalEtcd.GetName())
+		}
+		if !found {
+			log.Info("Etcd endpoints not available")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		currentEtcdEndpoints := strings.Split(endpoints, ",")
+		sort.Strings(currentEtcdEndpoints)
+		currentKCPEndpoints := kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints
+		if !reflect.DeepEqual(currentEtcdEndpoints, currentKCPEndpoints) {
+			kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints = currentEtcdEndpoints
+			if err := patchHelper.Patch(ctx, kcp); err != nil {
+				log.Error(err, "Failed to patch KubeadmControlPlane to update external etcd endpoints")
+				return ctrl.Result{}, err
+			}
+		}
 	}
 
 	// Initialize the control plane scope; this includes also checking for orphan machines and
@@ -596,6 +624,21 @@ func (r *KubeadmControlPlaneReconciler) reconcileDelete(ctx context.Context, con
 	log := ctrl.LoggerFrom(ctx)
 	log.Info("Reconcile KubeadmControlPlane deletion")
 
+	// Gets all machines, not just control plane machines.
+	allMachines, err := r.managementCluster.GetMachinesForCluster(ctx, controlPlane.Cluster)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if controlPlane.Cluster.Spec.ManagedExternalEtcdRef != nil {
+		for _, machine := range allMachines {
+			if util.IsEtcdMachine(machine) {
+				// remove external etcd-only machines from the "allMachines" collection so that the controlplane machines don't wait for etcd to be deleted first
+				delete(allMachines, machine.Name)
+			}
+		}
+	}
+
 	// If no control plane machines remain, remove the finalizer
 	if len(controlPlane.Machines) == 0 {
 		controlPlane.DeletingReason = controlplanev1.KubeadmControlPlaneDeletingDeletionCompletedV1Beta2Reason
@@ -616,14 +659,6 @@ func (r *KubeadmControlPlaneReconciler) reconcileDelete(ctx context.Context, con
 	// However, during delete we are hiding the counter (1 of x) because it does not make sense given that
 	// all the machines are deleted in parallel.
 	conditions.SetAggregate(controlPlane.KCP, controlplanev1.MachinesReadyCondition, controlPlane.Machines.ConditionGetters(), conditions.AddSourceRef())
-
-	// Gets all machines, not just control plane machines.
-	allMachines, err := r.managementCluster.GetMachinesForCluster(ctx, controlPlane.Cluster)
-	if err != nil {
-		controlPlane.DeletingReason = controlplanev1.KubeadmControlPlaneDeletingInternalErrorV1Beta2Reason
-		controlPlane.DeletingMessage = "Please check controller logs for errors" //nolint:goconst // Not making this a constant for now
-		return ctrl.Result{}, err
-	}
 
 	allMachinePools := &expv1.MachinePoolList{}
 	// Get all machine pools.

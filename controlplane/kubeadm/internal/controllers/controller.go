@@ -19,6 +19,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/blang/semver"
@@ -40,6 +43,7 @@ import (
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
+	"sigs.k8s.io/cluster-api/controllers/external"
 	"sigs.k8s.io/cluster-api/controllers/remote"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controlplane/kubeadm/internal"
@@ -68,6 +72,7 @@ const (
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines;machines/status,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=etcdcluster.cluster.x-k8s.io,resources=*,verbs=get;list;watch;update
 
 // KubeadmControlPlaneReconciler reconciles a KubeadmControlPlane object.
 type KubeadmControlPlaneReconciler struct {
@@ -173,6 +178,45 @@ func (r *KubeadmControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if cluster.Spec.ManagedExternalEtcdRef != nil {
+		etcdRef := cluster.Spec.ManagedExternalEtcdRef
+		externalEtcd, err := external.Get(ctx, r.Client, etcdRef, cluster.Namespace)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		externalEtcdReady, err := external.IsReady(externalEtcd)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if !externalEtcdReady {
+			log.Info("Managed external etcd is not ready yet, requeueing", "managedExternalEtcd", klog.KObj(externalEtcd))
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+
+		endpoints, found, err := external.GetExternalEtcdEndpoints(externalEtcd)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get endpoint field from %v", externalEtcd.GetName())
+		}
+		currentEtcdEndpoints := strings.Split(endpoints, ",")
+
+		if !found || areEndpointsEmpty(currentEtcdEndpoints) {
+			log.Info("Managed external etcd endpoints not available, requeueing")
+			return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+		}
+
+		sort.Strings(currentEtcdEndpoints)
+		currentKCPEndpoints := kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints
+		if !reflect.DeepEqual(currentEtcdEndpoints, currentKCPEndpoints) {
+			kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints = currentEtcdEndpoints
+			if err := patchHelper.Patch(ctx, kcp); err != nil {
+				log.Error(err, "Failed to patch KubeadmControlPlane to update external etcd endpoints")
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
 	// Add finalizer first if not exist to avoid the race condition between init and delete
 	if !controllerutil.ContainsFinalizer(kcp, controlplanev1.KubeadmControlPlaneFinalizer) {
 		controllerutil.AddFinalizer(kcp, controlplanev1.KubeadmControlPlaneFinalizer)
@@ -248,6 +292,10 @@ func (r *KubeadmControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{Requeue: true}, nil
 	}
 	return res, err
+}
+
+func areEndpointsEmpty(endpoints []string) bool {
+	return len(endpoints) == 0 || len(endpoints) == 1 && endpoints[0] == ""
 }
 
 func patchKubeadmControlPlane(ctx context.Context, patchHelper *patch.Helper, kcp *controlplanev1.KubeadmControlPlane) error {
@@ -474,6 +522,15 @@ func (r *KubeadmControlPlaneReconciler) reconcileDelete(ctx context.Context, clu
 		return ctrl.Result{}, err
 	}
 	ownedMachines := allMachines.Filter(collections.OwnedMachines(kcp))
+
+	if cluster.Spec.ManagedExternalEtcdRef != nil {
+		for _, machine := range allMachines {
+			if util.IsEtcdMachine(machine) {
+				// remove external etcd-only machines from the "allMachines" collection so that the controlplane machines don't wait for etcd to be deleted first
+				delete(allMachines, machine.Name)
+			}
+		}
+	}
 
 	// If no control plane machines remain, remove the finalizer
 	if len(ownedMachines) == 0 {

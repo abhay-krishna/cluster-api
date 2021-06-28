@@ -70,8 +70,7 @@ func AddAnnotations(o metav1.Object, desired map[string]string) bool {
 	}
 	annotations := o.GetAnnotations()
 	if annotations == nil {
-		annotations = make(map[string]string)
-		o.SetAnnotations(annotations)
+		annotations = make(map[string]string)	
 	}
 	hasChanged := false
 	for k, v := range desired {
@@ -80,6 +79,7 @@ func AddAnnotations(o metav1.Object, desired map[string]string) bool {
 			hasChanged = true
 		}
 	}
+	o.SetAnnotations(annotations)
 	return hasChanged
 }
 

@@ -122,6 +122,18 @@ func ControlPlaneMachines(clusterName string) func(machine *clusterv1.Machine) b
 	}
 }
 
+// EtcdMachines returns a filter to find all etcd machines for a cluster, regardless of ownership.
+// Usage: GetFilteredMachinesForCluster(ctx, client, cluster, EtcdMachines(cluster.Name)).
+func EtcdMachines(clusterName string) func(machine *clusterv1.Machine) bool {
+	selector := EtcdSelectorForCluster(clusterName)
+	return func(machine *clusterv1.Machine) bool {
+		if machine == nil {
+			return false
+		}
+		return selector.Matches(labels.Set(machine.Labels))
+	}
+}
+
 // AdoptableControlPlaneMachines returns a filter to find all un-controlled control plane machines.
 // Usage: GetFilteredMachinesForCluster(ctx, client, cluster, AdoptableControlPlaneMachines(cluster.Name, controlPlane)).
 func AdoptableControlPlaneMachines(clusterName string) func(machine *clusterv1.Machine) bool {
@@ -222,6 +234,20 @@ func ControlPlaneSelectorForCluster(clusterName string) labels.Selector {
 	return labels.NewSelector().Add(
 		must(labels.NewRequirement(clusterv1.ClusterNameLabel, selection.Equals, []string{clusterName})),
 		must(labels.NewRequirement(clusterv1.MachineControlPlaneLabel, selection.Exists, []string{})),
+	)
+}
+
+// EtcdSelectorForCluster returns the label selector necessary to get etcd machines for a given cluster.
+func EtcdSelectorForCluster(clusterName string) labels.Selector {
+	must := func(r *labels.Requirement, err error) labels.Requirement {
+		if err != nil {
+			panic(err)
+		}
+		return *r
+	}
+	return labels.NewSelector().Add(
+		must(labels.NewRequirement(clusterv1.ClusterNameLabel, selection.Equals, []string{clusterName})),
+		must(labels.NewRequirement(clusterv1.MachineEtcdClusterLabelName, selection.Exists, []string{})),
 	)
 }
 

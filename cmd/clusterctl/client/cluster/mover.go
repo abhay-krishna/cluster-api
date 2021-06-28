@@ -270,7 +270,8 @@ func (o *objectMover) checkProvisioningCompleted(ctx context.Context, graph *obj
 			return err
 		}
 
-		if machineObj.Status.NodeRef == nil {
+		_, isEtcdMachine := machineObj.Labels[clusterv1.MachineEtcdClusterLabelName]
+		if machineObj.Status.NodeRef == nil && !isEtcdMachine {
 			errList = append(errList, errors.Errorf("cannot start the move operation while %q %s/%s is still provisioning the node", machineObj.GroupVersionKind(), machineObj.GetNamespace(), machineObj.GetName()))
 		}
 	}

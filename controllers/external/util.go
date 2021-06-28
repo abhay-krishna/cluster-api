@@ -256,3 +256,13 @@ func IsInitialized(obj *unstructured.Unstructured) (bool, error) {
 	}
 	return initialized && found, nil
 }
+
+func GetExternalEtcdEndpoints(externalEtcd *unstructured.Unstructured) (string, bool, error) {
+	endpoints, found, err := unstructured.NestedString(externalEtcd.Object, "status", "endpoints")
+	if err != nil {
+		return "", false, errors.Wrapf(err, "failed to get external etcd endpoints from %v %q", externalEtcd.GroupVersionKind(),
+			externalEtcd.GetName())
+	}
+
+	return endpoints, found, nil
+}

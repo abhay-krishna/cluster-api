@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/utils/pointer"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,6 +36,7 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controllers/remote"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/kubeconfig"
 )
 
@@ -992,5 +994,51 @@ func newFakeMachineDeployment(namespace, clusterName string) *clusterv1.MachineD
 				Spec: newFakeMachineSpec(namespace, clusterName),
 			},
 		},
+	}
+}
+
+func TestReconcileNodeForEtcdMachines(t *testing.T) {
+	testCases := []struct {
+		name    string
+		machine *clusterv1.Machine
+	}{
+		{
+			name: "with providerID",
+			machine: &clusterv1.Machine{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						clusterv1.MachineEtcdClusterLabelName: "true",
+					},
+				},
+				Spec: clusterv1.MachineSpec{
+					ProviderID: pointer.String("ID"),
+				},
+			},
+		},
+		{
+			name: "without providerID",
+			machine: &clusterv1.Machine{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						clusterv1.MachineEtcdClusterLabelName: "true",
+					},
+				},
+				Spec: clusterv1.MachineSpec{},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			r := Reconciler{Client: env}
+			s := &scope{
+				cluster: &clusterv1.Cluster{},
+				machine: tc.machine,
+			}
+
+			g.Expect(r.reconcileNode(ctx, s)).To(Equal(ctrl.Result{}))
+			g.Expect(conditions.Get(tc.machine, clusterv1.MachineNodeHealthyCondition)).To(BeNil())
+		})
 	}
 }

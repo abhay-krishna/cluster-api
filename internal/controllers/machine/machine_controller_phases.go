@@ -19,6 +19,7 @@ package machine
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
 	"github.com/pkg/errors"
@@ -66,6 +67,13 @@ func (r *Reconciler) reconcilePhase(_ context.Context, m *clusterv1.Machine) {
 	// Set the phase to "running" if there is a NodeRef field and infrastructure is ready.
 	if m.Status.NodeRef != nil && m.Status.InfrastructureReady {
 		m.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
+	}
+
+	if _, ok := m.Labels[clusterv1.MachineEtcdClusterLabelName]; ok {
+		// Status.NodeRef does not get set for etcd machines since they don't correspond to k8s node objects
+		if m.Status.InfrastructureReady {
+			m.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
+		}
 	}
 
 	// Set the phase to "failed" if any of Status.FailureReason or Status.FailureMessage is not-nil.
@@ -319,6 +327,121 @@ func (r *Reconciler) reconcileInfrastructure(ctx context.Context, s *scope) (ctr
 	err = util.UnstructuredUnmarshalField(infraConfig, &m.Status.Addresses, "status", "addresses")
 	if err != nil && err != util.ErrUnstructuredFieldNotFound {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to retrieve addresses from infrastructure provider for Machine %q in namespace %q", m.Name, m.Namespace)
+	}
+
+	if cluster.Spec.ManagedExternalEtcdRef != nil {
+		// set first node's IP address on EtcdCluster
+		// get etcd cluster
+		ref := cluster.Spec.ManagedExternalEtcdRef
+		obj, err := external.Get(ctx, r.Client, ref, cluster.Namespace)
+		if err != nil {
+			if apierrors.IsNotFound(errors.Cause(err)) {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, err
+		}
+		// Initialize the patch helper.
+		patchHelper, err := patch.NewHelper(obj, r.Client)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		address, addressSet, err := unstructured.NestedFieldNoCopy(obj.Object, "status", "initMachineAddress")
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if !addressSet || address == "" {
+			etcdSecretName := fmt.Sprintf("%v-%v", cluster.Name, "etcd-init")
+			existingSecret := &corev1.Secret{}
+			if err := r.Client.Get(ctx, client.ObjectKey{Namespace: cluster.Namespace, Name: etcdSecretName}, existingSecret); err != nil {
+				if apierrors.IsNotFound(err) {
+					// secret doesn't exist, so create it for the init machine
+					var internalIP, internalDNS, externalIP, externalDNS, machineIP string
+					for _, address := range m.Status.Addresses {
+						switch address.Type {
+						case clusterv1.MachineInternalIP:
+							internalIP = address.Address
+						case clusterv1.MachineInternalDNS:
+							internalDNS = address.Address
+						case clusterv1.MachineExternalIP:
+							externalIP = address.Address
+						case clusterv1.MachineExternalDNS:
+							externalDNS = address.Address
+						}
+					}
+
+					// The order of these checks determines the precedence of the address to use
+					if externalDNS != "" {
+						machineIP = externalDNS
+					} else if externalIP != "" {
+						machineIP = externalIP
+					} else if internalDNS != "" {
+						machineIP = internalDNS
+					} else if internalIP != "" {
+						machineIP = internalIP
+					}
+
+					if machineIP == "" {
+						return ctrl.Result{}, fmt.Errorf("error getting etcd init IP address: %v", err)
+					}
+
+					secret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      etcdSecretName,
+							Namespace: cluster.Namespace,
+							Labels: map[string]string{
+								clusterv1.ClusterNameLabel: cluster.Name,
+							},
+							OwnerReferences: []metav1.OwnerReference{
+								{
+									APIVersion: clusterv1.GroupVersion.String(),
+									Kind:       cluster.Kind,
+									Name:       cluster.Name,
+									UID:        cluster.UID,
+								},
+							},
+						},
+						Data: map[string][]byte{
+							"address": []byte(machineIP),
+						},
+						Type: clusterv1.ClusterSecretType,
+					}
+					if err := r.Client.Create(ctx, secret); err != nil && !apierrors.IsAlreadyExists(err) {
+						return ctrl.Result{}, err
+					}
+
+					// set the Secret name on etcdCluster and update it so it receives a sync
+					if err := unstructured.SetNestedField(obj.Object, etcdSecretName, "status", "initMachineAddress"); err != nil {
+						return ctrl.Result{}, err
+					}
+					// set Initialized to true on etcdCluster and update it so it receives a sync
+					if err := unstructured.SetNestedField(obj.Object, true, "status", "initialized"); err != nil {
+						return ctrl.Result{}, err
+					}
+					// Always attempt to Patch the external object.
+					if err := patchHelper.Patch(ctx, obj); err != nil {
+						return ctrl.Result{}, err
+					}
+				} else {
+					log.Error(err, "error getting etcd init secret containing address")
+					return ctrl.Result{}, err
+				}
+			} else {
+				// secret exists but etcdcluster status field doesn't contain the secret name: can happen only after move
+				// set the Secret name on etcdCluster and update it so it receives a sync
+				if err := unstructured.SetNestedField(obj.Object, etcdSecretName, "status", "initMachineAddress"); err != nil {
+					return ctrl.Result{}, err
+				}
+				// set Initialized to true on etcdCluster and update it so it receives a sync
+				if err := unstructured.SetNestedField(obj.Object, true, "status", "initialized"); err != nil {
+					return ctrl.Result{}, err
+				}
+				// Always attempt to Patch the external object.
+				if err := patchHelper.Patch(ctx, obj); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
 	}
 
 	// Get and set the failure domain from the infrastructure provider.

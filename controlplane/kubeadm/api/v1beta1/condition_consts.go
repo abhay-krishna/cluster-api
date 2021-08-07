@@ -54,6 +54,14 @@ const (
 	// RollingUpdateInProgressReason (Severity=Warning) documents a KubeadmControlPlane object executing a
 	// rolling upgrade for aligning the machines spec to the desired state.
 	RollingUpdateInProgressReason = "RollingUpdateInProgress"
+
+	// ExternalEtcdEndpointsAvailable documents that the external etcd cluster's endpoints are available, and if KCP spec has changed
+	// then a KCP rollout can progress.
+	ExternalEtcdEndpointsAvailable clusterv1.ConditionType = "ExternalEtcdEndpointsAvailable"
+
+	// ExternalEtcdUndergoingUpgrade (Severity=Info) documents the external etcd cluster being used by current KCP object is
+	// undergoing an upgrade and that the etcd endpoints will change once the upgrade completes
+	ExternalEtcdUndergoingUpgrade = "ExternalEtcdUndergoingUpgrade"
 )
 
 const (

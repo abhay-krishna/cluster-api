@@ -24,6 +24,7 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -57,6 +58,7 @@ import (
 	"sigs.k8s.io/cluster-api/internal/util/ssa"
 	"sigs.k8s.io/cluster-api/internal/webhooks"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/certs"
 	"sigs.k8s.io/cluster-api/util/collections"
 	"sigs.k8s.io/cluster-api/util/conditions"
@@ -2886,9 +2888,9 @@ func TestKubeadmControlPlaneReconciler_reconcilePreTerminateHook(t *testing.T) {
 				Client: fakeClient,
 			}
 
-			workloadCluster := fakeWorkloadCluster{}
+			workloadCluster := &fakeWorkloadCluster{}
 			tt.controlPlane.InjectTestManagementCluster(&fakeManagementCluster{
-				Workload: &workloadCluster,
+				Workload: workloadCluster,
 			})
 
 			res, err := r.reconcilePreTerminateHook(ctx, tt.controlPlane)
@@ -3449,6 +3451,210 @@ func TestKubeadmControlPlaneReconciler_reconcileDelete(t *testing.T) {
 		g.Expect(kcp.Finalizers).To(BeEmpty())
 		g.Expect(controlPlane.DeletingReason).To(Equal(controlplanev1.KubeadmControlPlaneDeletingDeletionCompletedV1Beta2Reason))
 		g.Expect(controlPlane.DeletingMessage).To(Equal("Deletion completed"))
+	})
+}
+
+func TestKubeadmControlPlaneReconciler_updateManagedExternalEtcdEndpoints(t *testing.T) {
+	setup := func() (*clusterv1.Cluster, *controlplanev1.KubeadmControlPlane, *unstructured.Unstructured) {
+		ns := "my-ns"
+		endpoints := []string{"1.1.1.1", "2.2.2.2", "0.0.0.0"}
+		managedEtcd := builder.Etcd(ns, "test-7-my-etcd").Build()
+		unstructured.SetNestedField(managedEtcd.Object, true, "status", "ready")
+		unstructured.SetNestedField(managedEtcd.Object, strings.Join(endpoints, ","), "status", "endpoints")
+		cluster, kcp, _ := createClusterWithControlPlane(ns)
+		cluster.Spec.ManagedExternalEtcdRef = external.GetObjectReference(managedEtcd)
+		kcp.Spec.KubeadmConfigSpec.ClusterConfiguration = &bootstrapv1.ClusterConfiguration{
+			Etcd: bootstrapv1.Etcd{External: &bootstrapv1.ExternalEtcd{}},
+		}
+
+		return cluster, kcp, managedEtcd
+	}
+	t.Run("should update the endpoints in the kcp", func(t *testing.T) {
+		g := NewWithT(t)
+		cluster, kcp, managedEtcd := setup()
+		conditions.MarkFalse(kcp, controlplanev1.ExternalEtcdEndpointsAvailable, "", "", "")
+
+		fClient := newFakeClient(
+			builder.GenericEtcdCRD.DeepCopy(),
+			managedEtcd.DeepCopy(),
+			cluster.DeepCopy(),
+			kcp.DeepCopy(),
+		)
+
+		r := &KubeadmControlPlaneReconciler{
+			Client: fClient,
+			managementCluster: &fakeManagementCluster{
+				Management: &internal.Management{Client: fClient},
+				Workload:   &fakeWorkloadCluster{},
+			},
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			ctrl.Request{client.ObjectKeyFromObject(kcp)},
+		)
+		g.Expect(result).To(Equal(ctrl.Result{}))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Eventually(func(g Gomega) {
+			cp := &controlplanev1.KubeadmControlPlane{}
+			g.Expect(fClient.Get(ctx, client.ObjectKeyFromObject(kcp), cp)).To(Succeed())
+			g.Expect(
+				cp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints,
+			).To(Equal([]string{"0.0.0.0", "1.1.1.1", "2.2.2.2"}))
+			conditions.IsTrue(kcp, controlplanev1.ExternalEtcdEndpointsAvailable)
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("should requeue and not update kcp when endpoints in external etcd are not set", func(t *testing.T) {
+		g := NewWithT(t)
+		cluster, kcp, managedEtcd := setup()
+		unstructured.RemoveNestedField(managedEtcd.Object, "status", "endpoints")
+		kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints = []string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}
+
+		fClient := newFakeClient(
+			builder.GenericEtcdCRD.DeepCopy(),
+			managedEtcd.DeepCopy(),
+			cluster.DeepCopy(),
+			kcp.DeepCopy(),
+		)
+
+		r := &KubeadmControlPlaneReconciler{
+			Client: fClient,
+			managementCluster: &fakeManagementCluster{
+				Management: &internal.Management{Client: fClient},
+				Workload:   &fakeWorkloadCluster{},
+			},
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			ctrl.Request{client.ObjectKeyFromObject(kcp)},
+		)
+		g.Expect(result).To(Equal(ctrl.Result{RequeueAfter: 1 * time.Minute}))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Eventually(func(g Gomega) {
+			cp := &controlplanev1.KubeadmControlPlane{}
+			g.Expect(fClient.Get(ctx, client.ObjectKeyFromObject(kcp), cp)).To(Succeed())
+			g.Expect(
+				cp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints,
+			).To(Equal([]string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}))
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("should requeue and not update kcp when endpoints in external etcd are empty", func(t *testing.T) {
+		g := NewWithT(t)
+		cluster, kcp, managedEtcd := setup()
+		unstructured.SetNestedField(managedEtcd.Object, "", "status", "endpoints")
+		kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints = []string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}
+
+		fClient := newFakeClient(
+			builder.GenericEtcdCRD.DeepCopy(),
+			managedEtcd.DeepCopy(),
+			cluster.DeepCopy(),
+			kcp.DeepCopy(),
+		)
+
+		r := &KubeadmControlPlaneReconciler{
+			Client: fClient,
+			managementCluster: &fakeManagementCluster{
+				Management: &internal.Management{Client: fClient},
+				Workload:   &fakeWorkloadCluster{},
+			},
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			ctrl.Request{client.ObjectKeyFromObject(kcp)},
+		)
+		g.Expect(result).To(Equal(ctrl.Result{RequeueAfter: 1 * time.Minute}))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Eventually(func(g Gomega) {
+			cp := &controlplanev1.KubeadmControlPlane{}
+			g.Expect(fClient.Get(ctx, client.ObjectKeyFromObject(kcp), cp)).To(Succeed())
+			g.Expect(
+				cp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints,
+			).To(Equal([]string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}))
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("should requeue and not update kcp when endpoints in external etcd is not ready", func(t *testing.T) {
+		g := NewWithT(t)
+		cluster, kcp, managedEtcd := setup()
+		unstructured.SetNestedField(managedEtcd.Object, "0.0.0.0", "status", "endpoints")
+		unstructured.SetNestedField(managedEtcd.Object, false, "status", "ready")
+		kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints = []string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}
+
+		fClient := newFakeClient(
+			builder.GenericEtcdCRD.DeepCopy(),
+			managedEtcd.DeepCopy(),
+			cluster.DeepCopy(),
+			kcp.DeepCopy(),
+		)
+
+		r := &KubeadmControlPlaneReconciler{
+			Client: fClient,
+			managementCluster: &fakeManagementCluster{
+				Management: &internal.Management{Client: fClient},
+				Workload:   &fakeWorkloadCluster{},
+			},
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			ctrl.Request{client.ObjectKeyFromObject(kcp)},
+		)
+		g.Expect(result).To(Equal(ctrl.Result{RequeueAfter: 1 * time.Minute}))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Eventually(func(g Gomega) {
+			cp := &controlplanev1.KubeadmControlPlane{}
+			g.Expect(fClient.Get(ctx, client.ObjectKeyFromObject(kcp), cp)).To(Succeed())
+			g.Expect(
+				cp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints,
+			).To(Equal([]string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}))
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("should requeue and not update kcp when etcd is ongoing an upgrade in external etcd is going through an upgrade", func(t *testing.T) {
+		g := NewWithT(t)
+		cluster, kcp, managedEtcd := setup()
+		unstructured.SetNestedField(managedEtcd.Object, "0.0.0.0", "status", "endpoints")
+		annotations.AddAnnotations(managedEtcd, map[string]string{"etcdcluster.cluster.x-k8s.io/upgrading": "true"})
+		kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints = []string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}
+
+		fClient := newFakeClient(
+			builder.GenericEtcdCRD.DeepCopy(),
+			managedEtcd.DeepCopy(),
+			cluster.DeepCopy(),
+			kcp.DeepCopy(),
+		)
+
+		r := &KubeadmControlPlaneReconciler{
+			Client: fClient,
+			managementCluster: &fakeManagementCluster{
+				Management: &internal.Management{Client: fClient},
+				Workload:   &fakeWorkloadCluster{},
+			},
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			ctrl.Request{client.ObjectKeyFromObject(kcp)},
+		)
+		g.Expect(result).To(Equal(ctrl.Result{RequeueAfter: 1 * time.Minute}))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Eventually(func(g Gomega) {
+			cp := &controlplanev1.KubeadmControlPlane{}
+			g.Expect(fClient.Get(ctx, client.ObjectKeyFromObject(kcp), cp)).To(Succeed())
+			g.Expect(
+				cp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints,
+			).To(Equal([]string{"0.0.0.0", "1.1.1.1", "3.3.3.3"}))
+			conditions.IsFalse(cp, controlplanev1.ExternalEtcdEndpointsAvailable)
+		}, 5*time.Second).Should(Succeed())
 	})
 }
 

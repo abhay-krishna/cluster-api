@@ -18,23 +18,28 @@ package cluster
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/record"
 	utilfeature "k8s.io/component-base/featuregate/testing"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	expv1 "sigs.k8s.io/cluster-api/exp/api/v1beta1"
 	runtimev1 "sigs.k8s.io/cluster-api/exp/runtime/api/v1alpha1"
 	"sigs.k8s.io/cluster-api/feature"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/collections"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	v1beta2conditions "sigs.k8s.io/cluster-api/util/conditions/v1beta2"
@@ -1059,4 +1064,255 @@ func TestReconcileControlPlaneInitializedControlPlaneRef(t *testing.T) {
 	g.Expect(res.IsZero()).To(BeTrue())
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(conditions.Has(c, clusterv1.ControlPlaneInitializedCondition)).To(BeFalse())
+}
+
+func TestReconcileWithManagedEtcd(t *testing.T) {
+	t.Run("Should pause the ControlPlane when the external etcd becomes NotReady", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := "my-ns"
+
+		managedEtcd := builder.Etcd(ns, "test-7-my-etcd").Build()
+		controlPlane := builder.TestControlPlane(ns, "test-7-my-cp").Build()
+		cluster := builder.Cluster(ns, "test-7-my-cluster").
+			WithControlPlane(controlPlane).
+			WithManagedEtcd(managedEtcd).
+			Build()
+		controllerutil.AddFinalizer(cluster, clusterv1.ClusterFinalizer)
+
+		c := fake.NewClientBuilder().
+			WithObjects(
+				builder.GenericEtcdCRD.DeepCopy(),
+				builder.TestControlPlaneCRD.DeepCopy(),
+				managedEtcd,
+				controlPlane,
+				cluster,
+			).Build()
+
+		r := &Reconciler{
+			Client:   c,
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cluster)},
+		)
+		g.Expect(result).To(BeZero())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Eventually(func(g Gomega) {
+			cp := builder.TestControlPlane("", "").Build()
+			g.Expect(c.Get(ctx, client.ObjectKeyFromObject(controlPlane), cp)).To(Succeed())
+			g.Expect(annotations.HasPaused(cp)).To(BeTrue())
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("Should unpause the ControlPlane when the external etcd becomes Ready", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := "my-ns"
+
+		managedEtcd := builder.Etcd(ns, "test-7-my-etcd").Build()
+		unstructured.SetNestedField(managedEtcd.Object, true, "status", "ready")
+		controlPlane := builder.TestControlPlane(ns, "test-7-my-cp").Build()
+		annotations.AddAnnotations(controlPlane, map[string]string{clusterv1.PausedAnnotation: "true"})
+		g.Expect(annotations.HasPaused(controlPlane)).To(BeTrue())
+		cluster := builder.Cluster(ns, "test-7-my-cluster").
+			WithControlPlane(controlPlane).
+			WithManagedEtcd(managedEtcd).
+			Build()
+		controllerutil.AddFinalizer(cluster, clusterv1.ClusterFinalizer)
+
+		c := fake.NewClientBuilder().
+			WithObjects(
+				builder.GenericEtcdCRD.DeepCopy(),
+				builder.TestControlPlaneCRD.DeepCopy(),
+				managedEtcd,
+				controlPlane,
+				cluster,
+			).Build()
+
+		r := &Reconciler{
+			Client:   c,
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cluster)},
+		)
+		g.Expect(result).To(BeZero())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Eventually(func(g Gomega) {
+			cp := builder.TestControlPlane("", "").Build()
+			g.Expect(c.Get(ctx, client.ObjectKeyFromObject(controlPlane), cp)).To(Succeed())
+			g.Expect(annotations.HasPaused(cp)).To(BeFalse())
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("Should keep the ControlPlane unpaused when the external etcd is Ready", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := "my-ns"
+
+		managedEtcd := builder.Etcd(ns, "test-7-my-etcd").Build()
+		unstructured.SetNestedField(managedEtcd.Object, true, "status", "ready")
+		controlPlane := builder.TestControlPlane(ns, "test-7-my-cp").Build()
+		cluster := builder.Cluster(ns, "test-7-my-cluster").
+			WithControlPlane(controlPlane).
+			WithManagedEtcd(managedEtcd).
+			Build()
+		controllerutil.AddFinalizer(cluster, clusterv1.ClusterFinalizer)
+
+		c := fake.NewClientBuilder().
+			WithObjects(
+				builder.GenericEtcdCRD.DeepCopy(),
+				builder.TestControlPlaneCRD.DeepCopy(),
+				managedEtcd,
+				controlPlane,
+				cluster,
+			).Build()
+
+		r := &Reconciler{
+			Client:   c,
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cluster)},
+		)
+		g.Expect(result).To(BeZero())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Eventually(func(g Gomega) {
+			cp := builder.TestControlPlane("", "").Build()
+			g.Expect(c.Get(ctx, client.ObjectKeyFromObject(controlPlane), cp)).To(Succeed())
+			g.Expect(annotations.HasPaused(cp)).To(BeFalse())
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("Should not pause the ControlPlane with the skip annotation when the external etcd becomes NotReady", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := "my-ns"
+
+		managedEtcd := builder.Etcd(ns, "test-7-my-etcd").Build()
+		controlPlane := builder.TestControlPlane(ns, "test-7-my-cp").Build()
+		annotations.AddAnnotations(
+			controlPlane,
+			map[string]string{clusterv1.SkipControlPlanePauseManagedEtcdAnnotation: "true"},
+		)
+		cluster := builder.Cluster(ns, "test-7-my-cluster").
+			WithControlPlane(controlPlane).
+			WithManagedEtcd(managedEtcd).
+			Build()
+		controllerutil.AddFinalizer(cluster, clusterv1.ClusterFinalizer)
+
+		c := fake.NewClientBuilder().
+			WithObjects(
+				builder.GenericEtcdCRD.DeepCopy(),
+				builder.TestControlPlaneCRD.DeepCopy(),
+				managedEtcd,
+				controlPlane,
+				cluster,
+			).Build()
+
+		r := &Reconciler{
+			Client:   c,
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cluster)},
+		)
+		g.Expect(result).To(BeZero())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Eventually(func(g Gomega) {
+			cp := builder.TestControlPlane("", "").Build()
+			g.Expect(c.Get(ctx, client.ObjectKeyFromObject(controlPlane), cp)).To(Succeed())
+			g.Expect(annotations.HasPaused(cp)).To(BeFalse())
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("Should not unpause the ControlPlane with skip annotation when the external etcd becomes Ready", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := "my-ns"
+
+		managedEtcd := builder.Etcd(ns, "test-7-my-etcd").Build()
+		unstructured.SetNestedField(managedEtcd.Object, true, "status", "ready")
+		controlPlane := builder.TestControlPlane(ns, "test-7-my-cp").Build()
+		annotations.AddAnnotations(controlPlane, map[string]string{clusterv1.PausedAnnotation: "true"})
+		annotations.AddAnnotations(
+			controlPlane,
+			map[string]string{clusterv1.SkipControlPlanePauseManagedEtcdAnnotation: "true"},
+		)
+		g.Expect(annotations.HasPaused(controlPlane)).To(BeTrue())
+		cluster := builder.Cluster(ns, "test-7-my-cluster").
+			WithControlPlane(controlPlane).
+			WithManagedEtcd(managedEtcd).
+			Build()
+		controllerutil.AddFinalizer(cluster, clusterv1.ClusterFinalizer)
+
+		c := fake.NewClientBuilder().
+			WithObjects(
+				builder.GenericEtcdCRD.DeepCopy(),
+				builder.TestControlPlaneCRD.DeepCopy(),
+				managedEtcd,
+				controlPlane,
+				cluster,
+			).Build()
+
+		r := &Reconciler{
+			Client:   c,
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cluster)},
+		)
+		g.Expect(result).To(BeZero())
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Eventually(func(g Gomega) {
+			cp := builder.TestControlPlane("", "").Build()
+			g.Expect(c.Get(ctx, client.ObjectKeyFromObject(controlPlane), cp)).To(Succeed())
+			g.Expect(annotations.HasPaused(cp)).To(BeTrue())
+		}, 5*time.Second).Should(Succeed())
+	})
+
+	t.Run("Should requeue when etcd is not found", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := "my-ns"
+
+		managedEtcd := builder.Etcd(ns, "test-7-my-etcd").Build()
+		unstructured.SetNestedField(managedEtcd.Object, true, "status", "ready")
+		controlPlane := builder.TestControlPlane(ns, "test-7-my-cp").Build()
+		cluster := builder.Cluster(ns, "test-7-my-cluster").
+			WithControlPlane(controlPlane).
+			WithManagedEtcd(managedEtcd).
+			Build()
+		controllerutil.AddFinalizer(cluster, clusterv1.ClusterFinalizer)
+
+		c := fake.NewClientBuilder().
+			WithObjects(
+				builder.GenericEtcdCRD.DeepCopy(),
+				builder.TestControlPlaneCRD.DeepCopy(),
+				controlPlane,
+				cluster,
+			).Build()
+
+		r := &Reconciler{
+			Client:   c,
+			recorder: record.NewFakeRecorder(32),
+		}
+
+		result, err := r.Reconcile(
+			ctx,
+			reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cluster)},
+		)
+		g.Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+		g.Expect(err).NotTo(HaveOccurred())
+	})
 }

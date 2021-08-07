@@ -19,6 +19,7 @@ package internal
 import (
 	"context"
 
+	"github.com/blang/semver/v4"
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -81,6 +82,14 @@ func (w *Workload) UpdateEtcdExternalInKubeadmConfigMap(etcdExternal *bootstrapv
 			c.Etcd.External = etcdExternal
 		}
 	}
+}
+
+func (w *Workload) UpdateExternalEtcdEndpointsInKubeadmConfigMap(ctx context.Context, endpoints []string, version semver.Version) error {
+	return w.UpdateClusterConfiguration(ctx, version, func(c *bootstrapv1.ClusterConfiguration) {
+		if c.Etcd.External != nil {
+			c.Etcd.External.Endpoints = endpoints
+		}
+	})
 }
 
 // RemoveEtcdMemberForMachine removes the etcd member from the target cluster's etcd cluster.

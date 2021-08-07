@@ -218,6 +218,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (retRes ct
 
 	alwaysReconcile := []clusterReconcileFunc{
 		r.reconcileInfrastructure,
+		r.reconcileEtcdCluster,
 		r.reconcileControlPlane,
 		r.getDescendants,
 	}
@@ -245,7 +246,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (retRes ct
 		alwaysReconcile,
 		r.reconcileKubeconfig,
 		r.reconcileControlPlaneInitialized,
-		r.reconcileEtcdCluster,
 	)
 	return doReconcile(ctx, reconcileNormal, s)
 }
@@ -464,7 +464,7 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, s *scope) (reconcile.R
 		}
 	}
 	if cluster.Spec.ManagedExternalEtcdRef != nil {
-		obj, err := external.Get(ctx, r.Client, cluster.Spec.ManagedExternalEtcdRef, cluster.Namespace)
+		obj, err := external.Get(ctx, r.Client, cluster.Spec.ManagedExternalEtcdRef)
 		switch {
 		case apierrors.IsNotFound(errors.Cause(err)):
 			// Etcd cluster has been deleted
@@ -704,7 +704,7 @@ func (c *clusterDescendants) filterOwnedDescendants(cluster *clusterv1.Cluster) 
 		toObjectList(c.workerMachines),
 	}
 	if cluster.Spec.ManagedExternalEtcdRef != nil {
-		lists = append(lists, &c.etcdMachines)
+		lists = append(lists, toObjectList(c.etcdMachines))
 	}
 	if feature.Gates.Enabled(feature.MachinePool) {
 		lists = append([]client.ObjectList{&c.machinePools}, lists...)

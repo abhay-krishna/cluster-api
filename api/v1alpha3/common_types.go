@@ -70,6 +70,9 @@ const (
 
 	// ClusterSecretType defines the type of secret created by core components.
 	ClusterSecretType corev1.SecretType = "cluster.x-k8s.io/secret" //nolint:gosec
+
+	// ControlPlaneUpgradeCompletedAnnotation is set by the controlplane on the external etcd object after controlplane upgrade is completed
+	ControlPlaneUpgradeCompletedAnnotation = "controlplane.cluster.x-k8s.io/upgrade-complete"
 )
 
 // MachineAddressType describes a valid MachineAddress type.

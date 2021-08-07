@@ -42,6 +42,7 @@ type ClusterBuilder struct {
 	topology              *clusterv1.Topology
 	infrastructureCluster *unstructured.Unstructured
 	controlPlane          *unstructured.Unstructured
+	managedEtcd          *unstructured.Unstructured
 	network               *clusterv1.ClusterNetwork
 }
 
@@ -83,6 +84,12 @@ func (c *ClusterBuilder) WithControlPlane(t *unstructured.Unstructured) *Cluster
 	return c
 }
 
+// WithManagedEtcd adds the passed Etcd to the ClusterBuilder.
+func (c *ClusterBuilder) WithManagedEtcd(t *unstructured.Unstructured) *ClusterBuilder {
+	c.managedEtcd = t
+	return c
+}
+
 // WithTopology adds the passed Topology object to the ClusterBuilder.
 func (c *ClusterBuilder) WithTopology(topology *clusterv1.Topology) *ClusterBuilder {
 	c.topology = topology
@@ -112,6 +119,9 @@ func (c *ClusterBuilder) Build() *clusterv1.Cluster {
 	}
 	if c.controlPlane != nil {
 		obj.Spec.ControlPlaneRef = objToRef(c.controlPlane)
+	}
+	if c.managedEtcd != nil {
+		obj.Spec.ManagedExternalEtcdRef = objToRef(c.managedEtcd)
 	}
 	return obj
 }

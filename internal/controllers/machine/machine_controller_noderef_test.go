@@ -807,8 +807,12 @@ func TestReconcileNodeForEtcdMachines(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 			r := Reconciler{Client: env}
+			s := &scope{
+				cluster: &clusterv1.Cluster{},
+				machine: tc.machine,
+			}
 
-			g.Expect(r.reconcileNode(ctx, &clusterv1.Cluster{}, tc.machine)).To(Equal(ctrl.Result{}))
+			g.Expect(r.reconcileNode(ctx, s)).To(Equal(ctrl.Result{}))
 			g.Expect(conditions.Get(tc.machine, clusterv1.MachineNodeHealthyCondition)).To(BeNil())
 		})
 	}

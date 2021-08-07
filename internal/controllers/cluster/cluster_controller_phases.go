@@ -19,13 +19,13 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -223,37 +223,13 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context, cluster *cluster
 	if cluster.Spec.ControlPlaneRef == nil {
 		return ctrl.Result{}, nil
 	}
-	log := ctrl.LoggerFrom(ctx)
+
 	if cluster.Spec.ManagedExternalEtcdRef != nil {
-		// check if the referenced etcd cluster is ready or not
-		etcdRef := cluster.Spec.ManagedExternalEtcdRef
-		externalEtcd, err := external.Get(ctx, r.Client, etcdRef, cluster.Namespace)
-		if err != nil {
-			if apierrors.IsNotFound(errors.Cause(err)) {
-				log.Info("Could not find external object for cluster, requeuing", "refGroupVersionKind", etcdRef.GroupVersionKind(), "refName", etcdRef.Name)
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-			}
+		log := ctrl.LoggerFrom(ctx)
+		if result, err := r.handlePauseControlPlaneWithExternalManagedEtcd(ctx, log, cluster); err != nil {
 			return ctrl.Result{}, err
-		}
-		externalEtcdReady, err := external.IsReady(externalEtcd)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if !externalEtcdReady {
-			// External Etcd Cluster has not been created, pause control plane provisioning by setting the paused annotation on the Control plane object
-			controlPlane, err := external.Get(ctx, r.Client, cluster.Spec.ControlPlaneRef, cluster.Namespace)
-			if err != nil {
-				if apierrors.IsNotFound(errors.Cause(err)) {
-					log.Info("Could not find control plane for cluster, requeuing", "refGroupVersionKind", cluster.Spec.ControlPlaneRef.GroupVersionKind(), "refName", cluster.Spec.ControlPlaneRef.Name)
-					return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-				}
-				return ctrl.Result{}, err
-			}
-			annotations.AddAnnotations(controlPlane, map[string]string{clusterv1.PausedAnnotation: "true"})
-			if err := r.Client.Update(ctx, controlPlane, &client.UpdateOptions{}); err != nil {
-				log.Error(err, "error pausing control plane")
-				return ctrl.Result{Requeue: true}, err
-			}
+		} else if !result.IsZero() {
+			return result, nil
 		}
 	}
 
@@ -312,6 +288,55 @@ func (r *Reconciler) reconcileControlPlane(ctx context.Context, cluster *cluster
 	return ctrl.Result{}, nil
 }
 
+// handlePauseControlPlaneWithExternalManagedEtcd pauses or unpauses the control plane through the pause
+// annotation based on the readiness of the external managed etcd (not-ready -> pause or ready -> unpause)
+func (r *Reconciler) handlePauseControlPlaneWithExternalManagedEtcd(ctx context.Context, log logr.Logger, cluster *clusterv1.Cluster) (ctrl.Result, error) {
+	controlPlane, err := external.Get(ctx, r.Client, cluster.Spec.ControlPlaneRef, cluster.Namespace)
+	if apierrors.IsNotFound(errors.Cause(err)) {
+		log.Info("Could not find control plane object for cluster, requeuing", "refGroupVersionKind",
+			cluster.Spec.ControlPlaneRef.GroupVersionKind(), "refName", cluster.Spec.ControlPlaneRef.Name,
+		)
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// If user has opt-out from the pause/unpause functionality, just exit
+	if annotations.HasAnnotation(controlPlane, clusterv1.SkipControlPlanePauseManagedEtcdAnnotation) {
+		return ctrl.Result{}, nil
+	}
+
+	etcdRef := cluster.Spec.ManagedExternalEtcdRef
+	externalEtcd, err := external.Get(ctx, r.Client, etcdRef, cluster.Namespace)
+	if err != nil {
+		if apierrors.IsNotFound(errors.Cause(err)) {
+			log.Info("Could not find external object for cluster, requeuing", "refGroupVersionKind", etcdRef.GroupVersionKind(), "refName", etcdRef.Name)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	externalEtcdReady, err := external.IsReady(externalEtcd)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if externalEtcdReady && annotations.HasPaused(controlPlane) {
+		unstructured.RemoveNestedField(controlPlane.Object, "metadata", "annotations", clusterv1.PausedAnnotation)
+		if err := r.Client.Update(ctx, controlPlane); err != nil {
+			return ctrl.Result{Requeue: true}, errors.Wrap(err, "resuming control plane reconcile")
+		}
+	} else if !externalEtcdReady && !annotations.HasPaused(controlPlane) {
+		annotations.AddAnnotations(controlPlane, map[string]string{clusterv1.PausedAnnotation: "true"})
+		if err := r.Client.Update(ctx, controlPlane); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "pausing control plane reconcile")
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
 func (r *Reconciler) reconcileEtcdCluster(ctx context.Context, cluster *clusterv1.Cluster) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
@@ -344,23 +369,6 @@ func (r *Reconciler) reconcileEtcdCluster(ctx context.Context, cluster *clusterv
 		return ctrl.Result{}, err
 	}
 	cluster.Status.ManagedExternalEtcdReady = ready
-
-	if ready {
-		// resume control plane
-		controlPlane, err := external.Get(ctx, r.Client, cluster.Spec.ControlPlaneRef, cluster.Namespace)
-		if err != nil {
-			if apierrors.IsNotFound(errors.Cause(err)) {
-				log.Info("Could not find control plane for cluster, requeuing", "refGroupVersionKind", cluster.Spec.ControlPlaneRef.GroupVersionKind(), "refName", cluster.Spec.ControlPlaneRef.Name)
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-			}
-			return ctrl.Result{}, err
-		}
-		unstructured.RemoveNestedField(controlPlane.Object, "metadata", "annotations", clusterv1.PausedAnnotation)
-		if err := r.Client.Update(ctx, controlPlane, &client.UpdateOptions{}); err != nil {
-			log.Error(err, "error resuming control plane")
-			return ctrl.Result{Requeue: true}, err
-		}
-	}
 
 	// Report a summary of current status of the etcd cluster object defined for this cluster.
 	conditions.SetMirror(cluster, clusterv1.ManagedExternalEtcdClusterReadyCondition,

@@ -333,10 +333,12 @@ func (r *Reconciler) reconcileEtcdCluster(ctx context.Context, cluster *clusterv
 			}
 			return ctrl.Result{}, err
 		}
-		unstructured.RemoveNestedField(controlPlane.Object, "metadata", "annotations", clusterv1.PausedAnnotation)
-		if err := r.Client.Update(ctx, controlPlane, &client.UpdateOptions{}); err != nil {
-			log.Error(err, "error resuming control plane")
-			return ctrl.Result{Requeue: true}, err
+		if annotations.HasPaused(controlPlane) {
+			unstructured.RemoveNestedField(controlPlane.Object, "metadata", "annotations", clusterv1.PausedAnnotation)
+			if err := r.Client.Update(ctx, controlPlane, &client.UpdateOptions{}); err != nil {
+				log.Error(err, "error resuming control plane")
+				return ctrl.Result{Requeue: true}, err
+			}
 		}
 	}
 

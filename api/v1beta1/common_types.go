@@ -126,6 +126,9 @@ const (
 	// any changes to the actual object because it is a dry run) and the topology controller
 	// will receive the resulting object.
 	TopologyDryRunAnnotation = "topology.cluster.x-k8s.io/dry-run"
+
+	// ControlPlaneUpgradeCompletedAnnotation is set by the controlplane on the external etcd object after controlplane upgrade is completed
+	ControlPlaneUpgradeCompletedAnnotation = "controlplane.cluster.x-k8s.io/upgrade-complete"
 )
 
 const (

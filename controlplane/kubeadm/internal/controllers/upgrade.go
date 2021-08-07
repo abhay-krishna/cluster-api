@@ -102,6 +102,12 @@ func (r *KubeadmControlPlaneReconciler) upgradeControlPlane(
 		}
 	}
 
+	if kcp.Spec.KubeadmConfigSpec.ClusterConfiguration != nil && kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External != nil {
+		if err := workloadCluster.UpdateExternalEtcdEndpointsInKubeadmConfigMap(ctx, kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints, parsedVersion); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to update the external etcd endpoints in the kubeadm config map")
+		}
+	}
+
 	if kcp.Spec.KubeadmConfigSpec.ClusterConfiguration != nil {
 		if err := workloadCluster.UpdateAPIServerInKubeadmConfigMap(ctx, kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.APIServer, parsedVersion); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to update api server in the kubeadm config map")

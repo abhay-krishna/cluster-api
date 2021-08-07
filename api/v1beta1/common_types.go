@@ -142,6 +142,9 @@ const (
 	// will receive the resulting object.
 	TopologyDryRunAnnotation = "topology.cluster.x-k8s.io/dry-run"
 
+	// ControlPlaneUpgradeCompletedAnnotation is set by the controlplane on the external etcd object after controlplane upgrade is completed.
+	ControlPlaneUpgradeCompletedAnnotation = "controlplane.cluster.x-k8s.io/upgrade-complete"
+
 	// ReplicasManagedByAnnotation is an annotation that indicates external (non-Cluster API) management of infra scaling.
 	// The practical effect of this is that the capi "replica" count should be passively derived from the number of observed infra machines,
 	// instead of being a source of truth for eventual consistency.

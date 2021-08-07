@@ -209,11 +209,34 @@ func (r *KubeadmControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.
 		sort.Strings(currentEtcdEndpoints)
 		currentKCPEndpoints := kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints
 		if !reflect.DeepEqual(currentEtcdEndpoints, currentKCPEndpoints) {
+			/* During upgrade, KCP spec's endpoints will again be an empty list, and will get populated by the cluster controller once the
+			external etcd controller has set them. If the KCP controller proceeds without checking whether the etcd cluster is undergoing upgrade,
+			there is a chance it will get the current un-updated endpoints from the etcd cluster object, and those would end up being endpoints of the
+			etcd members that will get deleted during upgrade. Hence the controller checks and stalls if the etcd cluster is undergoing upgrade and proceeds
+			only after the etcd upgrade is completed as that guarantees that the KCP has latest set of endpoints.
+			*/
+			etcdUpgradeInProgress, err := external.IsExternalEtcdUpgrading(externalEtcd)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if etcdUpgradeInProgress {
+				log.Info("Etcd undergoing upgrade, marking etcd endpoints available condition as false, since new endpoints will be available only after etcd upgrade")
+				if conditions.IsTrue(kcp, controlplanev1.ExternalEtcdEndpointsAvailable) || conditions.IsUnknown(kcp, controlplanev1.ExternalEtcdEndpointsAvailable) {
+					conditions.MarkFalse(kcp, controlplanev1.ExternalEtcdEndpointsAvailable, controlplanev1.ExternalEtcdUndergoingUpgrade, clusterv1.ConditionSeverityInfo, "")
+					if err := patchKubeadmControlPlane(ctx, patchHelper, kcp); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+				return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+			}
 			kcp.Spec.KubeadmConfigSpec.ClusterConfiguration.Etcd.External.Endpoints = currentEtcdEndpoints
 			if err := patchHelper.Patch(ctx, kcp); err != nil {
 				log.Error(err, "Failed to patch KubeadmControlPlane to update external etcd endpoints")
 				return ctrl.Result{}, err
 			}
+		}
+		if conditions.IsFalse(kcp, controlplanev1.ExternalEtcdEndpointsAvailable) {
+			conditions.MarkTrue(kcp, controlplanev1.ExternalEtcdEndpointsAvailable)
 		}
 	}
 
@@ -441,6 +464,25 @@ func (r *KubeadmControlPlaneReconciler) reconcile(ctx context.Context, cluster *
 		// NOTE: we are checking the condition already exists in order to avoid to set this condition at the first
 		// reconciliation/before a rolling upgrade actually starts.
 		if conditions.Has(controlPlane.KCP, controlplanev1.MachinesSpecUpToDateCondition) {
+			if conditions.IsFalse(controlPlane.KCP, controlplanev1.MachinesSpecUpToDateCondition) {
+				/* Once KCP upgrade has completed, the controller will annotate the external etcd object to indicate that the older KCP machines
+				are no longer part of the cluster, and so any older out-of-date etcd members and machines can be deleted
+				*/
+				if cluster.Spec.ManagedExternalEtcdRef != nil {
+					etcdRef := cluster.Spec.ManagedExternalEtcdRef
+					externalEtcd, err := external.Get(ctx, r.Client, etcdRef, cluster.Namespace)
+					if err != nil {
+						return ctrl.Result{}, err
+					}
+					log.Info("Adding upgrade complete annotation on etcdadmCluster")
+					if err := external.SetKCPUpdateCompleteAnnotationOnEtcdadmCluster(externalEtcd); err != nil {
+						return ctrl.Result{}, err
+					}
+					if err := r.Client.Update(ctx, externalEtcd); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+			}
 			conditions.MarkTrue(controlPlane.KCP, controlplanev1.MachinesSpecUpToDateCondition)
 		}
 	}

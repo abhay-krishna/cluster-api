@@ -254,3 +254,32 @@ func GetExternalEtcdEndpoints(externalEtcd *unstructured.Unstructured) (string, 
 
 	return endpoints, found, nil
 }
+
+func IsExternalEtcdUpgrading(externalEtcd *unstructured.Unstructured) (bool, error) {
+	annotations, hasAnnotations, err := unstructured.NestedStringMap(externalEtcd.Object, "metadata", "annotations")
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to check if external etcd is undergoing upgrade %v %q", externalEtcd.GroupVersionKind(),
+			externalEtcd.GetName())
+	}
+
+	if !hasAnnotations {
+		return false, nil
+	}
+
+	_, hasUpgradingAnnotation := annotations["etcdcluster.cluster.x-k8s.io/upgrading"]
+	return hasUpgradingAnnotation, nil
+}
+
+func SetKCPUpdateCompleteAnnotationOnEtcdadmCluster(externalEtcd *unstructured.Unstructured) error {
+	annotations, hasAnnotations, err := unstructured.NestedStringMap(externalEtcd.Object, "metadata", "annotations")
+	if err != nil {
+		return errors.Wrapf(err, "failed to update external etcd annotation after controlplane upgrade completed %v %q", externalEtcd.GroupVersionKind(),
+			externalEtcd.GetName())
+	}
+
+	if !hasAnnotations {
+		annotations = make(map[string]string)
+	}
+	annotations[clusterv1.ControlPlaneUpgradeCompletedAnnotation] = "true"
+	return unstructured.SetNestedStringMap(externalEtcd.UnstructuredContent(), annotations, "metadata", "annotations")
+}

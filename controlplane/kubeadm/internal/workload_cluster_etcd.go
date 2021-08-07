@@ -18,7 +18,6 @@ package internal
 
 import (
 	"context"
-
 	"github.com/blang/semver"
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -107,6 +106,14 @@ func (w *Workload) UpdateEtcdExtraArgsInKubeadmConfigMap(ctx context.Context, ex
 	return w.updateClusterConfiguration(ctx, func(c *bootstrapv1.ClusterConfiguration) {
 		if c.Etcd.Local != nil {
 			c.Etcd.Local.ExtraArgs = extraArgs
+		}
+	}, version)
+}
+
+func (w *Workload) UpdateExternalEtcdEndpointsInKubeadmConfigMap(ctx context.Context, endpoints []string, version semver.Version) error {
+	return w.updateClusterConfiguration(ctx, func(c *bootstrapv1.ClusterConfiguration) {
+		if c.Etcd.External != nil {
+			c.Etcd.External.Endpoints = endpoints
 		}
 	}, version)
 }

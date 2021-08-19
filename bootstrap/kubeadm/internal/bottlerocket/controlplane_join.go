@@ -21,6 +21,12 @@ func NewJoinControlPlane(input *cloudinit.ControlPlaneJoinInput, config *Bottler
 	input.WriteFiles = input.Certificates.AsFiles()
 	input.ControlPlane = true
 	input.WriteFiles = append(input.WriteFiles, input.AdditionalFiles...)
+	var err error
+	input.WriteFiles, err = patchKubeVipFile(input.WriteFiles)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to patch kube-vip manifest file for control plane join")
+	}
+
 	bootstrapContainerUserData, err := generateBootstrapContainerUserData("JoinControlplane", controlPlaneJoinBottlerocketInit, input)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to generate user data for machine joining control plane")

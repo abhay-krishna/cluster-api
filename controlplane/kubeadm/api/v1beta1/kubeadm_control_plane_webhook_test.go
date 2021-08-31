@@ -647,6 +647,18 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 		Directory: "/tmp/patches",
 	}
 
+	validUpdateClusterConfPauseImage := before.DeepCopy()
+	validUpdateClusterConfPauseImage.Spec.KubeadmConfigSpec.ClusterConfiguration.Pause = bootstrapv1.Pause{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
+	validUpdateClusterConfBRBootstrapImage := before.DeepCopy()
+	validUpdateClusterConfBRBootstrapImage.Spec.KubeadmConfigSpec.ClusterConfiguration.BottlerocketBootstrap = bootstrapv1.BottlerocketBootstrap{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
+	validUpdateJoinConfPauseImage := before.DeepCopy()
+	validUpdateJoinConfPauseImage.Spec.KubeadmConfigSpec.JoinConfiguration.Pause = bootstrapv1.Pause{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
+	validUpdateJoinConfBRBootstrapImage := before.DeepCopy()
+	validUpdateJoinConfBRBootstrapImage.Spec.KubeadmConfigSpec.JoinConfiguration.BottlerocketBootstrap = bootstrapv1.BottlerocketBootstrap{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
 	updateInitConfigurationSkipPhases := before.DeepCopy()
 	updateInitConfigurationSkipPhases.Spec.KubeadmConfigSpec.InitConfiguration.SkipPhases = []string{"addon/kube-proxy"}
 
@@ -1014,6 +1026,30 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 			before:                before,
 			kcp:                   switchFromCloudInitToIgnition,
 		},
+		{
+			name:      "should allow changes to cluster configuration pause image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateClusterConfPauseImage,
+		},
+		{
+			name:      "should allow changes to cluster configuration bottlerocket bootstrap image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateClusterConfBRBootstrapImage,
+		},
+		{
+			name:      "should allow changes to join configuration pause image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateJoinConfPauseImage,
+		},
+		{
+			name:      "should allow changes to join configuration bottlerocket bootstrap image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateJoinConfBRBootstrapImage,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1192,6 +1228,7 @@ func TestValidateVersion(t *testing.T) {
 		})
 	}
 }
+
 func TestKubeadmControlPlaneValidateUpdateAfterDefaulting(t *testing.T) {
 	before := &KubeadmControlPlane{
 		ObjectMeta: metav1.ObjectMeta{

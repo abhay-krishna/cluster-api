@@ -705,6 +705,18 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 	updateUseExperimentalRetryJoin := before.DeepCopy()
 	updateUseExperimentalRetryJoin.Spec.KubeadmConfigSpec.UseExperimentalRetryJoin = false //nolint:staticcheck
 
+	validUpdateClusterConfPauseImage := before.DeepCopy()
+	validUpdateClusterConfPauseImage.Spec.KubeadmConfigSpec.ClusterConfiguration.Pause = bootstrapv1.Pause{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
+	validUpdateClusterConfBRBootstrapImage := before.DeepCopy()
+	validUpdateClusterConfBRBootstrapImage.Spec.KubeadmConfigSpec.ClusterConfiguration.BottlerocketBootstrap = bootstrapv1.BottlerocketBootstrap{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
+	validUpdateJoinConfPauseImage := before.DeepCopy()
+	validUpdateJoinConfPauseImage.Spec.KubeadmConfigSpec.JoinConfiguration.Pause = bootstrapv1.Pause{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
+	validUpdateJoinConfBRBootstrapImage := before.DeepCopy()
+	validUpdateJoinConfBRBootstrapImage.Spec.KubeadmConfigSpec.JoinConfiguration.BottlerocketBootstrap = bootstrapv1.BottlerocketBootstrap{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}
+
 	tests := []struct {
 		name                  string
 		enableIgnitionFeature bool
@@ -1044,6 +1056,30 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 			expectErr: false,
 			before:    beforeUseExperimentalRetryJoin,
 			kcp:       updateUseExperimentalRetryJoin,
+		},
+		{
+			name:      "should allow changes to cluster configuration pause image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateClusterConfPauseImage,
+		},
+		{
+			name:      "should allow changes to cluster configuration bottlerocket bootstrap image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateClusterConfBRBootstrapImage,
+		},
+		{
+			name:      "should allow changes to join configuration pause image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateJoinConfPauseImage,
+		},
+		{
+			name:      "should allow changes to join configuration bottlerocket bootstrap image",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateJoinConfBRBootstrapImage,
 		},
 	}
 

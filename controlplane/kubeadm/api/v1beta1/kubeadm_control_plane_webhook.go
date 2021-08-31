@@ -139,6 +139,8 @@ func (in *KubeadmControlPlane) ValidateUpdate(old runtime.Object) error {
 	// For example, {"spec", "*"} will allow any path under "spec" to change.
 	allowedPaths := [][]string{
 		{"metadata", "*"},
+		{spec, kubeadmConfigSpec, clusterConfiguration, "bottlerocketBootstrap", "*"},
+		{spec, kubeadmConfigSpec, clusterConfiguration, "pause", "*"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "imageRepository"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "imageTag"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "extraArgs"},
@@ -161,6 +163,8 @@ func (in *KubeadmControlPlane) ValidateUpdate(old runtime.Object) error {
 		{spec, kubeadmConfigSpec, joinConfiguration, nodeRegistration, "*"},
 		{spec, kubeadmConfigSpec, joinConfiguration, patches, directory},
 		{spec, kubeadmConfigSpec, joinConfiguration, skipPhases},
+		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketBootstrap", "*"},
+		{spec, kubeadmConfigSpec, joinConfiguration, "pause", "*"},
 		{spec, kubeadmConfigSpec, preKubeadmCommands},
 		{spec, kubeadmConfigSpec, postKubeadmCommands},
 		{spec, kubeadmConfigSpec, files},

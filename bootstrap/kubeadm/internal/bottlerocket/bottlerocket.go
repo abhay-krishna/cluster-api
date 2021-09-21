@@ -22,9 +22,10 @@ const (
 )
 
 type BottlerocketConfig struct {
-	Pause                 bootstrapv1.Pause
-	BottlerocketBootstrap bootstrapv1.BottlerocketBootstrap
-	ProxyConfiguration    bootstrapv1.ProxyConfiguration
+	Pause                       bootstrapv1.Pause
+	BottlerocketBootstrap       bootstrapv1.BottlerocketBootstrap
+	ProxyConfiguration          bootstrapv1.ProxyConfiguration
+	RegistryMirrorConfiguration bootstrapv1.RegistryMirrorConfiguration
 }
 
 type BottlerocketSettingsInput struct {
@@ -34,6 +35,8 @@ type BottlerocketSettingsInput struct {
 	PauseContainerSource       string
 	HTTPSProxyEndpoint         string
 	NoProxyEndpoints           []string
+	RegistryMirrorEndpoint     string
+	RegistryMirrorCACert       string
 }
 
 type HostPath struct {
@@ -90,7 +93,12 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(networkInitTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse networks %s template", kind)
 	}
-
+	if _, err := tm.Parse(registryMirrorTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse registry mirror %s template", kind)
+	}
+	if _, err := tm.Parse(registryMirrorCACertTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse registry mirror ca cert %s template", kind)
+	}
 	t, err := tm.Parse(tpl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s template", kind)
@@ -125,6 +133,10 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		PauseContainerSource:       fmt.Sprintf("%s:%s", config.Pause.ImageRepository, config.Pause.ImageTag),
 		HTTPSProxyEndpoint:         config.ProxyConfiguration.HTTPSProxy,
 		NoProxyEndpoints:           config.ProxyConfiguration.NoProxy,
+		RegistryMirrorEndpoint:     config.RegistryMirrorConfiguration.Endpoint,
+	}
+	if config.RegistryMirrorConfiguration.CACert != "" {
+		bottlerocketInput.RegistryMirrorCACert = base64.StdEncoding.EncodeToString([]byte(config.RegistryMirrorConfiguration.CACert))
 	}
 
 	bottlerocketNodeUserData, err := generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)

@@ -409,6 +409,11 @@ func (in *ClusterSpec) DeepCopyInto(out *ClusterSpec) {
 		*out = new(v1.ObjectReference)
 		**out = **in
 	}
+	if in.ManagedExternalEtcdRef != nil {
+		in, out := &in.ManagedExternalEtcdRef, &out.ManagedExternalEtcdRef
+		*out = new(v1.ObjectReference)
+		**out = **in
+	}
 	if in.InfrastructureRef != nil {
 		in, out := &in.InfrastructureRef, &out.InfrastructureRef
 		*out = new(v1.ObjectReference)

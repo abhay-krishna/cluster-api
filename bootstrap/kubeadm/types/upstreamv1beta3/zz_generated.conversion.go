@@ -413,6 +413,10 @@ func Convert_upstreamv1beta3_ClusterConfiguration_To_v1beta1_ClusterConfiguratio
 }
 
 func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta3_ClusterConfiguration(in *v1beta1.ClusterConfiguration, out *ClusterConfiguration, s conversion.Scope) error {
+	// WARNING: in.Pause requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketBootstrap requires manual conversion: does not exist in peer-type
+	// WARNING: in.Proxy requires manual conversion: does not exist in peer-type
+	// WARNING: in.RegistryMirror requires manual conversion: does not exist in peer-type
 	if err := Convert_v1beta1_Etcd_To_upstreamv1beta3_Etcd(&in.Etcd, &out.Etcd, s); err != nil {
 		return err
 	}
@@ -719,6 +723,10 @@ func Convert_upstreamv1beta3_JoinConfiguration_To_v1beta1_JoinConfiguration(in *
 }
 
 func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(in *v1beta1.JoinConfiguration, out *JoinConfiguration, s conversion.Scope) error {
+	// WARNING: in.Pause requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketBootstrap requires manual conversion: does not exist in peer-type
+	// WARNING: in.Proxy requires manual conversion: does not exist in peer-type
+	// WARNING: in.RegistryMirror requires manual conversion: does not exist in peer-type
 	if err := Convert_v1beta1_NodeRegistrationOptions_To_upstreamv1beta3_NodeRegistrationOptions(&in.NodeRegistration, &out.NodeRegistration, s); err != nil {
 		return err
 	}

@@ -32,6 +32,17 @@ https-proxy = "{{.HTTPSProxyEndpoint}}"
 no-proxy = "{{.NoProxyEndpoints}}"
 {{- end -}}
 `
+	registryMirrorTemplate = `{{ define "registryMirrorSettings" -}}
+[settings.container-registry.mirrors]
+"public.ecr.aws" = ["https://{{.RegistryMirrorEndpoint}}"]
+{{- end -}}
+`
+	registryMirrorCACertTemplate = `{{ define "registryMirrorCACertSettings" -}}
+[settings.pki.registry-mirror-ca]
+data = "{{.RegistryMirrorCACert}}"
+trusted=true
+{{- end -}}
+`
 	bottlerocketNodeInitSettingsTemplate = `{{template "bootstrapHostContainerSettings" .}}
 
 {{template "adminContainerInitSettings" .}}
@@ -40,6 +51,14 @@ no-proxy = "{{.NoProxyEndpoints}}"
 
 {{- if (ne .HTTPSProxyEndpoint "")}}
 {{template "networkInitSettings" .}}
+{{- end -}}
+
+{{- if (ne .RegistryMirrorEndpoint "")}}
+{{template "registryMirrorSettings" .}}
+{{- end -}}
+
+{{- if (ne .RegistryMirrorCACert "")}}
+{{template "registryMirrorCACertSettings" .}}
 {{- end -}}
 `
 )

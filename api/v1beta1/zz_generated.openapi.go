@@ -915,6 +915,12 @@ func schema_sigsk8sio_cluster_api_api_v1beta1_ClusterSpec(ref common.ReferenceCa
 							Ref:         ref("k8s.io/api/core/v1.ObjectReference"),
 						},
 					},
+					"managedExternalEtcdRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ManagedExternalEtcdRef is an optional reference to an etcd provider resource that holds details for provisioning an external etcd cluster",
+							Ref:         ref("k8s.io/api/core/v1.ObjectReference"),
+						},
+						},
 					"infrastructureRef": {
 						SchemaProps: spec.SchemaProps{
 							Description: "infrastructureRef is a reference to a provider-specific resource that holds the details for provisioning infrastructure for a cluster in said provider.",
@@ -1035,6 +1041,22 @@ func schema_sigsk8sio_cluster_api_api_v1beta1_ClusterStatus(ref common.Reference
 							Description: "observedGeneration is the latest generation observed by the controller.",
 							Type:        []string{"integer"},
 							Format:      "int64",
+						},
+					},
+					"managedExternalEtcdInitialized": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ManagedExternalEtcdInitialized indicates that first etcd member's IP address is set by machine controller, so remaining etcd members can lookup the address to join the cluster",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+						},
+					"managedExternalEtcdReady": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ManagedExternalEtcdReady indicates external etcd cluster is fully provisioned",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 					"v1beta2": {

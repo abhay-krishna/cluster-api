@@ -378,6 +378,20 @@ spec:
                                   type: string
                                 type: array
                             type: object
+                          registryMirror:
+                            description: |-
+                              RegistryMirror holds the image registry mirror information
+                              This is only for bottlerocket
+                            properties:
+                              caCert:
+                                description: CACert defines the CA cert for the registry
+                                  mirror
+                                type: string
+                              endpoint:
+                                description: Endpoint defines the registry mirror
+                                  endpoint to use for pulling images
+                                type: string
+                            type: object
                           scheduler:
                             description: Scheduler contains extra settings for the
                               scheduler control plane component
@@ -948,6 +962,20 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                            type: object
+                          registryMirror:
+                            description: |-
+                              RegistryMirror holds the image registry mirror information
+                              This is only for bottlerocket
+                            properties:
+                              caCert:
+                                description: CACert defines the CA cert for the registry
+                                  mirror
+                                type: string
+                              endpoint:
+                                description: Endpoint defines the registry mirror
+                                  endpoint to use for pulling images
+                                type: string
                             type: object
                         type: object
                       mounts:
@@ -2798,6 +2826,20 @@ spec:
                                   type: string
                                 type: array
                             type: object
+                          registryMirror:
+                            description: |-
+                              RegistryMirror holds the image registry mirror information
+                              This is only for bottlerocket
+                            properties:
+                              caCert:
+                                description: CACert defines the CA cert for the registry
+                                  mirror
+                                type: string
+                              endpoint:
+                                description: Endpoint defines the registry mirror
+                                  endpoint to use for pulling images
+                                type: string
+                            type: object
                           scheduler:
                             description: scheduler contains extra settings for the
                               scheduler control plane component
@@ -3365,6 +3407,20 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                            type: object
+                          registryMirror:
+                            description: |-
+                              RegistryMirror holds the image registry mirror information
+                              This is only for bottlerocket
+                            properties:
+                              caCert:
+                                description: CACert defines the CA cert for the registry
+                                  mirror
+                                type: string
+                              endpoint:
+                                description: Endpoint defines the registry mirror
+                                  endpoint to use for pulling images
+                                type: string
                             type: object
                           skipPhases:
                             description: |-

@@ -29,7 +29,7 @@ user-data = "{{.BootstrapContainerUserData}}"
 	networkInitTemplate = `{{ define "networkInitSettings" -}}
 [settings.network]
 https-proxy = "{{.HTTPSProxyEndpoint}}"
-no-proxy = "{{.NoProxyEndpoints}}"
+no-proxy = [{{stringsJoin .NoProxyEndpoints "," }}]
 {{- end -}}
 `
 	registryMirrorTemplate = `{{ define "registryMirrorSettings" -}}

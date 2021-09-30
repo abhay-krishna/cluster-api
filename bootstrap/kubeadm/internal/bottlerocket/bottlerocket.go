@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -80,7 +81,7 @@ func generateAdminContainerUserData(kind string, tpl string, data interface{}) (
 }
 
 func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, error) {
-	tm := template.New(kind)
+	tm := template.New(kind).Funcs(template.FuncMap{"stringsJoin": strings.Join})
 	if _, err := tm.Parse(bootstrapHostContainerTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse hostContainer %s template", kind)
 	}
@@ -132,8 +133,12 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		BootstrapContainerSource:   fmt.Sprintf("%s:%s", config.BottlerocketBootstrap.ImageRepository, config.BottlerocketBootstrap.ImageTag),
 		PauseContainerSource:       fmt.Sprintf("%s:%s", config.Pause.ImageRepository, config.Pause.ImageTag),
 		HTTPSProxyEndpoint:         config.ProxyConfiguration.HTTPSProxy,
-		NoProxyEndpoints:           config.ProxyConfiguration.NoProxy,
 		RegistryMirrorEndpoint:     config.RegistryMirrorConfiguration.Endpoint,
+	}
+	if len(config.ProxyConfiguration.NoProxy) > 0 {
+		for _, noProxy := range config.ProxyConfiguration.NoProxy {
+			bottlerocketInput.NoProxyEndpoints = append(bottlerocketInput.NoProxyEndpoints, strconv.Quote(noProxy))
+		}
 	}
 	if config.RegistryMirrorConfiguration.CACert != "" {
 		bottlerocketInput.RegistryMirrorCACert = base64.StdEncoding.EncodeToString([]byte(config.RegistryMirrorConfiguration.CACert))

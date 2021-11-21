@@ -39,6 +39,14 @@ func (src *Cluster) ConvertTo(dstRaw conversion.Hub) error {
 		conditions.MarkTrue(dst, clusterv1.ControlPlaneInitializedCondition)
 	}
 
+	if src.Status.ManagedExternalEtcdInitialized {
+		conditions.MarkTrue(dst, clusterv1.ManagedExternalEtcdClusterInitializedCondition)
+	}
+
+	if src.Status.ManagedExternalEtcdReady {
+		conditions.MarkTrue(dst, clusterv1.ManagedExternalEtcdClusterReadyCondition)
+	}
+
 	// Manually restore data.
 	restored := &clusterv1.Cluster{}
 	if ok, err := utilconversion.UnmarshalData(src, restored); err != nil || !ok {
@@ -47,6 +55,10 @@ func (src *Cluster) ConvertTo(dstRaw conversion.Hub) error {
 
 	if restored.Spec.Topology != nil {
 		dst.Spec.Topology = restored.Spec.Topology
+	}
+
+	if restored.Spec.ManagedExternalEtcdRef != nil {
+		dst.Spec.ManagedExternalEtcdRef = restored.Spec.ManagedExternalEtcdRef
 	}
 
 	return nil

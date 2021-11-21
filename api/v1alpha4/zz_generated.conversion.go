@@ -731,6 +731,7 @@ func autoConvert_v1alpha4_ClusterSpec_To_v1beta1_ClusterSpec(in *ClusterSpec, ou
 		return err
 	}
 	out.ControlPlaneRef = (*v1.ObjectReference)(unsafe.Pointer(in.ControlPlaneRef))
+	out.ManagedExternalEtcdRef = (*v1.ObjectReference)(unsafe.Pointer(in.ManagedExternalEtcdRef))
 	out.InfrastructureRef = (*v1.ObjectReference)(unsafe.Pointer(in.InfrastructureRef))
 	if in.Topology != nil {
 		in, out := &in.Topology, &out.Topology
@@ -756,6 +757,7 @@ func autoConvert_v1beta1_ClusterSpec_To_v1alpha4_ClusterSpec(in *v1beta1.Cluster
 		return err
 	}
 	out.ControlPlaneRef = (*v1.ObjectReference)(unsafe.Pointer(in.ControlPlaneRef))
+	out.ManagedExternalEtcdRef = (*v1.ObjectReference)(unsafe.Pointer(in.ManagedExternalEtcdRef))
 	out.InfrastructureRef = (*v1.ObjectReference)(unsafe.Pointer(in.InfrastructureRef))
 	if in.Topology != nil {
 		in, out := &in.Topology, &out.Topology
@@ -783,6 +785,8 @@ func autoConvert_v1alpha4_ClusterStatus_To_v1beta1_ClusterStatus(in *ClusterStat
 	out.ControlPlaneReady = in.ControlPlaneReady
 	out.Conditions = *(*v1beta1.Conditions)(unsafe.Pointer(&in.Conditions))
 	out.ObservedGeneration = in.ObservedGeneration
+	out.ManagedExternalEtcdInitialized = in.ManagedExternalEtcdInitialized
+	out.ManagedExternalEtcdReady = in.ManagedExternalEtcdReady
 	return nil
 }
 
@@ -800,6 +804,8 @@ func autoConvert_v1beta1_ClusterStatus_To_v1alpha4_ClusterStatus(in *v1beta1.Clu
 	out.ControlPlaneReady = in.ControlPlaneReady
 	out.Conditions = *(*Conditions)(unsafe.Pointer(&in.Conditions))
 	out.ObservedGeneration = in.ObservedGeneration
+	out.ManagedExternalEtcdInitialized = in.ManagedExternalEtcdInitialized
+	out.ManagedExternalEtcdReady = in.ManagedExternalEtcdReady
 	return nil
 }
 

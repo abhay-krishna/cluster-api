@@ -73,6 +73,26 @@ type InitConfiguration struct {
 type ClusterConfiguration struct {
 	metav1.TypeMeta `json:",inline"`
 
+	// Pause holds the image source for pause container
+	// This is only for bottlerocket
+	// +optional
+	Pause Pause `json:"pause,omitempty"`
+
+	// BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
+
+	// Proxy holds the https and no proxy information
+	// This is only for bottlerocket
+	// +optional
+	Proxy ProxyConfiguration `json:"proxy,omitempty"`
+
+	// RegistryMirror holds the image registry mirror information
+	// This is only for bottlerocket
+	// +optional
+	RegistryMirror RegistryMirrorConfiguration `json:"registryMirror,omitempty"`
+
 	// Etcd holds configuration for etcd.
 	// +optional
 	Etcd Etcd `json:"etcd,omitempty"`
@@ -133,6 +153,38 @@ type ClusterConfiguration struct {
 	// The cluster name
 	// +optional
 	ClusterName string `json:"clusterName,omitempty"`
+}
+
+// Pause defines the pause image repo and tag that should be run on the bootstrapped nodes.
+// This setting is ONLY for bottlerocket nodes, as this needs to be set pre-boot time along with user-data
+type Pause struct {
+	// ImageMeta allows to customize the image used for the Pause component
+	ImageMeta `json:",inline"`
+}
+
+// BottlerocketBootstrap holds the settings of kubeadm bootstrap container for bottlerocket nodes
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketBootstrap struct {
+	// ImageMeta allows to customize the image used for the BottlerocketBootstrap component
+	ImageMeta `json:",inline"`
+}
+
+// ProxyConfiguration holds the settings for proxying bottlerocket services
+type ProxyConfiguration struct {
+	// HTTPS proxy
+	HTTPSProxy string `json:"httpsProxy,omitempty"`
+
+	// No proxy, list of ips that should not use proxy
+	NoProxy []string `json:"noProxy,omitempty"`
+}
+
+// RegistryMirrorConfiguration holds the settings for image registry mirror
+type RegistryMirrorConfiguration struct {
+	// Endpoint defines the registry mirror endpoint to use for pulling images
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// CACert defines the CA cert for the registry mirror
+	CACert string `json:"caCert,omitempty"`
 }
 
 // ControlPlaneComponent holds settings common to control plane component of the cluster.
@@ -334,6 +386,26 @@ type ExternalEtcd struct {
 // JoinConfiguration contains elements describing a particular node.
 type JoinConfiguration struct {
 	metav1.TypeMeta `json:",inline"`
+
+	// Pause holds the image source for pause container
+	// This is only for bottlerocket
+	// +optional
+	Pause Pause `json:"pause,omitempty"`
+
+	// BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
+
+	// Proxy holds the https and no proxy information
+	// This is only for bottlerocket
+	// +optional
+	Proxy ProxyConfiguration `json:"proxy,omitempty"`
+
+	// RegistryMirror holds the image registry mirror information
+	// This is only for bottlerocket
+	// +optional
+	RegistryMirror RegistryMirrorConfiguration `json:"registryMirror,omitempty"`
 
 	// NodeRegistration holds fields that relate to registering the new control-plane node to the cluster
 	// +optional

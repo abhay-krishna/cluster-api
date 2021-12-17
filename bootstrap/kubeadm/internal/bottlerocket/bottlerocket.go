@@ -28,6 +28,7 @@ type BottlerocketConfig struct {
 	ProxyConfiguration          bootstrapv1.ProxyConfiguration
 	RegistryMirrorConfiguration bootstrapv1.RegistryMirrorConfiguration
 	KubeletExtraArgs            map[string]string
+	Taints                      []corev1.Taint
 }
 
 type BottlerocketSettingsInput struct {
@@ -40,6 +41,7 @@ type BottlerocketSettingsInput struct {
 	RegistryMirrorEndpoint     string
 	RegistryMirrorCACert       string
 	NodeLabels                 string
+	Taints                     string
 }
 
 type HostPath struct {
@@ -105,6 +107,9 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(nodeLabelsTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse node labels %s template", kind)
 	}
+	if _, err := tm.Parse(taintsTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse taints %s template", kind)
+	}
 	t, err := tm.Parse(tpl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s template", kind)
@@ -140,6 +145,7 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		HTTPSProxyEndpoint:         config.ProxyConfiguration.HTTPSProxy,
 		RegistryMirrorEndpoint:     config.RegistryMirrorConfiguration.Endpoint,
 		NodeLabels:                 parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
+		Taints:                     parseTaints(config.Taints), //empty string if it does not exist
 	}
 	if len(config.ProxyConfiguration.NoProxy) > 0 {
 		for _, noProxy := range config.ProxyConfiguration.NoProxy {
@@ -155,6 +161,36 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		return nil, err
 	}
 	return bottlerocketNodeUserData, nil
+}
+
+// bottlerocket configuration accepts taints in the format
+// "key" = ["value:Effect", "value2:Effect2"]
+func parseTaints(taints []corev1.Taint) string {
+	if len(taints) == 0 {
+		return ""
+	}
+	taintValueEffectTemplate := "\"%v:%v\""
+	taintsMap := make(map[string][]string)
+	for _, taint := range taints {
+		valueEffectString := fmt.Sprintf(taintValueEffectTemplate, taint.Value, taint.Effect)
+		taintsMap[taint.Key]= append(taintsMap[taint.Key], valueEffectString)
+	}
+
+	var taintsToml strings.Builder
+	for k, v := range taintsMap {
+		// write the taint key and opening bracket: '"key" = ['
+		taintKey := fmt.Sprintf("\"%v\" = [", k)
+		taintsToml.WriteString(taintKey)
+
+		// write the value:effect mappings: '"value1:Effect1", "value2:Effect2"'
+		taintValueEffectMappings := strings.Join(v, ",")
+		taintsToml.WriteString(taintValueEffectMappings)
+
+		// close the brackets and go to a new line
+		taintsToml.WriteString("]")
+		taintsToml.WriteString("\n")
+	}
+	return taintsToml.String()
 }
 
 func parseNodeLabels(nodeLabels string) string {

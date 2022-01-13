@@ -134,6 +134,7 @@ func (webhook *KubeadmControlPlane) ValidateCreate(_ context.Context, obj runtim
 
 const (
 	spec                 = "spec"
+	status               = "status"
 	kubeadmConfigSpec    = "kubeadmConfigSpec"
 	clusterConfiguration = "clusterConfiguration"
 	initConfiguration    = "initConfiguration"
@@ -247,6 +248,7 @@ func (webhook *KubeadmControlPlane) ValidateUpdate(_ context.Context, oldObj, ne
 		{spec, "rolloutBefore", "*"},
 		{spec, "rolloutStrategy"},
 		{spec, "rolloutStrategy", "*"},
+		{status, "version"},
 	}
 
 	oldK, ok := oldObj.(*controlplanev1.KubeadmControlPlane)

@@ -43,6 +43,11 @@ data = "{{.RegistryMirrorCACert}}"
 trusted=true
 {{- end -}}
 `
+	nodeLabelsTemplate = `{{ define "nodeLabelSettings" -}}
+[settings.kubernetes.node-labels]
+{{.NodeLabels}}
+{{- end -}}
+`
 	bottlerocketNodeInitSettingsTemplate = `{{template "bootstrapHostContainerSettings" .}}
 
 {{template "adminContainerInitSettings" .}}
@@ -59,6 +64,10 @@ trusted=true
 
 {{- if (ne .RegistryMirrorCACert "")}}
 {{template "registryMirrorCACertSettings" .}}
+{{- end -}}
+
+{{- if (ne .NodeLabels "")}}
+{{template "nodeLabelSettings" .}}
 {{- end -}}
 `
 )

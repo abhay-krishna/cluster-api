@@ -481,6 +481,9 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.ClusterConfiguration.RegistryMirror
 		}
+		if scope.Config.Spec.InitConfiguration.NodeRegistration.KubeletExtraArgs != nil {
+			bottlerocketConfig.KubeletExtraArgs = scope.Config.Spec.InitConfiguration.NodeRegistration.KubeletExtraArgs
+		}
 	}
 
 	clusterdata, err := kubeadmtypes.MarshalClusterConfigurationForVersion(scope.Config.Spec.ClusterConfiguration, parsedVersion)
@@ -679,6 +682,9 @@ func (r *KubeadmConfigReconciler) joinWorker(ctx context.Context, scope *Scope) 
 		if scope.Config.Spec.JoinConfiguration.RegistryMirror.Endpoint != "" {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.JoinConfiguration.RegistryMirror
 		}
+		if scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs != nil {
+			bottlerocketConfig.KubeletExtraArgs = scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs
+		}
 		bootstrapJoinData, err = bottlerocket.NewNode(nodeInput, bottlerocketConfig)
 		if err != nil {
 			scope.Error(err, "Failed to create a worker bottlerocket join configuration")
@@ -798,6 +804,9 @@ func (r *KubeadmConfigReconciler) joinControlplane(ctx context.Context, scope *S
 		}
 		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.ClusterConfiguration.RegistryMirror
+		}
+		if scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs != nil {
+			bottlerocketConfig.KubeletExtraArgs = scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs
 		}
 		bootstrapJoinData, err = bottlerocket.NewJoinControlPlane(controlPlaneJoinInput, bottlerocketConfig)
 		if err != nil {

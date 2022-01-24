@@ -11,7 +11,7 @@ import (
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 
 	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -26,6 +26,7 @@ type BottlerocketConfig struct {
 	BottlerocketBootstrap       bootstrapv1.BottlerocketBootstrap
 	ProxyConfiguration          bootstrapv1.ProxyConfiguration
 	RegistryMirrorConfiguration bootstrapv1.RegistryMirrorConfiguration
+	KubeletExtraArgs            map[string]string
 }
 
 type BottlerocketSettingsInput struct {
@@ -37,6 +38,7 @@ type BottlerocketSettingsInput struct {
 	NoProxyEndpoints           []string
 	RegistryMirrorEndpoint     string
 	RegistryMirrorCACert       string
+	NodeLabels                 string
 }
 
 type HostPath struct {
@@ -99,6 +101,9 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(registryMirrorCACertTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse registry mirror ca cert %s template", kind)
 	}
+	if _, err := tm.Parse(nodeLabelsTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse node labels %s template", kind)
+	}
 	t, err := tm.Parse(tpl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s template", kind)
@@ -133,6 +138,7 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		PauseContainerSource:       fmt.Sprintf("%s:%s", config.Pause.ImageRepository, config.Pause.ImageTag),
 		HTTPSProxyEndpoint:         config.ProxyConfiguration.HTTPSProxy,
 		RegistryMirrorEndpoint:     config.RegistryMirrorConfiguration.Endpoint,
+		NodeLabels:                 parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
 	}
 	if len(config.ProxyConfiguration.NoProxy) > 0 {
 		for _, noProxy := range config.ProxyConfiguration.NoProxy {
@@ -148,6 +154,21 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		return nil, err
 	}
 	return bottlerocketNodeUserData, nil
+}
+
+func parseNodeLabels(nodeLabels string) string {
+	if nodeLabels == "" {
+		return ""
+	}
+	nodeLabelsToml := ""
+	nodeLabelsList := strings.Split(nodeLabels, ",")
+	for _, nodeLabel := range nodeLabelsList {
+		keyVal := strings.Split(nodeLabel, "=")
+		if len(keyVal) == 2 {
+			nodeLabelsToml += fmt.Sprintf("\"%v\" = \"%v\"\n", keyVal[0], keyVal[1])
+		}
+	}
+	return nodeLabelsToml
 }
 
 // Parses through all the users and return list of all user's authorized ssh keys

@@ -83,6 +83,11 @@ type ClusterConfiguration struct {
 	// +optional
 	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
 
+	// BottlerocketControl holds the image source for control container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketControl BottlerocketControl `json:"bottlerocketControl,omitempty"`
+
 	// Proxy holds the https and no proxy information
 	// This is only for bottlerocket
 	// +optional
@@ -166,6 +171,13 @@ type Pause struct {
 // This setting is ONLY for bottlerocket nodes.
 type BottlerocketBootstrap struct {
 	// ImageMeta allows to customize the image used for the BottlerocketBootstrap component
+	ImageMeta `json:",inline"`
+}
+
+// BottlerocketControl holds the settings of control container for bottlerocket nodes
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketControl struct {
+	// ImageMeta allows to customize the image used for the BottlerocketControl component
 	ImageMeta `json:",inline"`
 }
 
@@ -396,6 +408,11 @@ type JoinConfiguration struct {
 	// This is only for bottlerocket
 	// +optional
 	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
+
+	// BottlerocketControl holds the image source for control container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketControl BottlerocketControl `json:"bottlerocketControl,omitempty"`
 
 	// Proxy holds the https and no proxy information
 	// This is only for bottlerocket

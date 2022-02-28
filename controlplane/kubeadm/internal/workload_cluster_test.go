@@ -625,12 +625,17 @@ func TestUpdateUpdateClusterConfigurationInKubeadmConfigMap(t *testing.T) {
 					clusterConfigurationKey: yaml.Raw(`
 						apiServer: {}
 						apiVersion: kubeadm.k8s.io/v1beta2
+						bottlerocketBootstrap: {}
+						bottlerocketControl: {}
 						controllerManager: {}
 						dns: {}
 						etcd: {}
 						kind: ClusterConfiguration
 						kubernetesVersion: v1.17.2
 						networking: {}
+						pause: {}
+						proxy: {}
+						registryMirror: {}
 						scheduler: {}
 						`),
 				},
@@ -664,12 +669,17 @@ func TestUpdateUpdateClusterConfigurationInKubeadmConfigMap(t *testing.T) {
 					clusterConfigurationKey: yaml.Raw(`
 						apiServer: {}
 						apiVersion: kubeadm.k8s.io/v1beta2
+						bottlerocketBootstrap: {}
+						bottlerocketControl: {}
 						controllerManager: {}
 						dns: {}
 						etcd: {}
 						kind: ClusterConfiguration
 						kubernetesVersion: v1.17.2
 						networking: {}
+						pause: {}
+						proxy: {}
+						registryMirror: {}
 						scheduler: {}
 						`),
 				},
@@ -1029,11 +1039,16 @@ func TestUpdateApiServerInKubeadmConfigMap(t *testing.T) {
 				    mountPath: /foo/bar
 				    name: mount2
 				apiVersion: kubeadm.k8s.io/v1beta2
+				bottlerocketBootstrap: {}
+				bottlerocketControl: {}
 				controllerManager: {}
 				dns: {}
 				etcd: {}
 				kind: ClusterConfiguration
 				networking: {}
+				pause: {}
+				proxy: {}
+				registryMirror: {}
 				scheduler: {}
 				`),
 		},
@@ -1098,6 +1113,8 @@ func TestUpdateControllerManagerInKubeadmConfigMap(t *testing.T) {
 			wantClusterConfiguration: yaml.Raw(`
 				apiServer: {}
 				apiVersion: kubeadm.k8s.io/v1beta2
+				bottlerocketBootstrap: {}
+				bottlerocketControl: {}
 				controllerManager:
 				  extraArgs:
 				    bar: baz
@@ -1110,6 +1127,9 @@ func TestUpdateControllerManagerInKubeadmConfigMap(t *testing.T) {
 				etcd: {}
 				kind: ClusterConfiguration
 				networking: {}
+				pause: {}
+				proxy: {}
+				registryMirror: {}
 				scheduler: {}
 				`),
 		},
@@ -1174,11 +1194,16 @@ func TestUpdateSchedulerInKubeadmConfigMap(t *testing.T) {
 			wantClusterConfiguration: yaml.Raw(`
 				apiServer: {}
 				apiVersion: kubeadm.k8s.io/v1beta2
+				bottlerocketBootstrap: {}
+				bottlerocketControl: {}
 				controllerManager: {}
 				dns: {}
 				etcd: {}
 				kind: ClusterConfiguration
 				networking: {}
+				pause: {}
+				proxy: {}
+				registryMirror: {}
 				scheduler:
 				  extraArgs:
 				    bar: baz

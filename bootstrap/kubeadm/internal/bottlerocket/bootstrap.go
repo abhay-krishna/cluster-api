@@ -55,6 +55,14 @@ trusted=true
 {{- end -}}
 `
 
+	controlContainerTemplate = `{{ define "controlContainerSettings" -}}
+[settings.host-containers.control]
+enabled = true
+superpowered = false
+source = "{{.ControlContainerSource}}"
+{{- end -}}
+`
+
 	bottlerocketNodeInitSettingsTemplate = `{{template "bootstrapHostContainerSettings" .}}
 
 {{template "adminContainerInitSettings" .}}
@@ -79,6 +87,10 @@ trusted=true
 
 {{- if (ne .Taints "")}}
 {{template "taintsTemplate" .}}
+{{- end -}}
+
+{{- if (ne .ControlContainerSource "")}}
+{{template "controlContainerSettings" .}}
 {{- end -}}
 `
 )

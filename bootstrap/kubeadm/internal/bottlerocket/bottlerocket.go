@@ -25,6 +25,7 @@ const (
 type BottlerocketConfig struct {
 	Pause                       bootstrapv1.Pause
 	BottlerocketBootstrap       bootstrapv1.BottlerocketBootstrap
+	BottlerocketControl         bootstrapv1.BottlerocketControl
 	ProxyConfiguration          bootstrapv1.ProxyConfiguration
 	RegistryMirrorConfiguration bootstrapv1.RegistryMirrorConfiguration
 	KubeletExtraArgs            map[string]string
@@ -35,6 +36,7 @@ type BottlerocketSettingsInput struct {
 	BootstrapContainerUserData string
 	AdminContainerUserData     string
 	BootstrapContainerSource   string
+	ControlContainerSource     string
 	PauseContainerSource       string
 	HTTPSProxyEndpoint         string
 	NoProxyEndpoints           []string
@@ -92,6 +94,9 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(adminContainerInitTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse adminContainer %s template", kind)
 	}
+	if _, err := tm.Parse(controlContainerTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse controlContainer %s template", kind)
+	}
 	if _, err := tm.Parse(kubernetesInitTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse kubernetes %s template", kind)
 	}
@@ -146,6 +151,9 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		RegistryMirrorEndpoint:     config.RegistryMirrorConfiguration.Endpoint,
 		NodeLabels:                 parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
 		Taints:                     parseTaints(config.Taints), //empty string if it does not exist
+	}
+	if config.BottlerocketControl.ImageRepository != "" && config.BottlerocketControl.ImageTag != "" {
+		bottlerocketInput.ControlContainerSource = fmt.Sprintf("%s:%s", config.BottlerocketControl.ImageRepository, config.BottlerocketControl.ImageTag)
 	}
 	if len(config.ProxyConfiguration.NoProxy) > 0 {
 		for _, noProxy := range config.ProxyConfiguration.NoProxy {

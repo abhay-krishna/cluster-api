@@ -1423,6 +1423,8 @@ func TestUpdateCoreDNSImageInfoInKubeadmConfigMap(t *testing.T) {
 			wantClusterConfiguration: utilyaml.Raw(`
 				apiServer: {}
 				apiVersion: kubeadm.k8s.io/v1beta2
+				bottlerocketBootstrap: {}
+				bottlerocketControl: {}
 				controllerManager: {}
 				dns:
 				  imageRepository: example.com/k8s
@@ -1430,6 +1432,9 @@ func TestUpdateCoreDNSImageInfoInKubeadmConfigMap(t *testing.T) {
 				etcd: {}
 				kind: ClusterConfiguration
 				networking: {}
+				pause: {}
+				proxy: {}
+				registryMirror: {}
 				scheduler: {}
 				`),
 		},

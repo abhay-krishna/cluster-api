@@ -164,11 +164,16 @@ func TestMarshalClusterConfigurationForVersion(t *testing.T) {
 			},
 			want: "apiServer: {}\n" +
 				"apiVersion: kubeadm.k8s.io/v1beta2\n" +
+				"bottlerocketBootstrap: {}\n" +
+				"bottlerocketControl: {}\n" +
 				"controllerManager: {}\n" +
 				"dns: {}\n" +
 				"etcd: {}\n" +
 				"kind: ClusterConfiguration\n" +
 				"networking: {}\n" +
+				"pause: {}\n" +
+				"proxy: {}\n" +
+				"registryMirror: {}\n" +
 				"scheduler: {}\n",
 			wantErr: false,
 		},
@@ -180,11 +185,16 @@ func TestMarshalClusterConfigurationForVersion(t *testing.T) {
 			},
 			want: "apiServer: {}\n" +
 				"apiVersion: kubeadm.k8s.io/v1beta3\n" +
+				"bottlerocketBootstrap: {}\n" +
+				"bottlerocketControl: {}\n" +
 				"controllerManager: {}\n" +
 				"dns: {}\n" +
 				"etcd: {}\n" +
 				"kind: ClusterConfiguration\n" +
 				"networking: {}\n" +
+				"pause: {}\n" +
+				"proxy: {}\n" +
+				"registryMirror: {}\n" +
 				"scheduler: {}\n",
 			wantErr: false,
 		},
@@ -400,11 +410,16 @@ func TestMarshalJoinConfigurationForVersion(t *testing.T) {
 				version: semver.MustParse("1.15.0"),
 			},
 			want: "apiVersion: kubeadm.k8s.io/v1beta2\n" + "" +
+				"bottlerocketBootstrap: {}\n" +
+				"bottlerocketControl: {}\n" +
 				"discovery: {}\n" +
 				"kind: JoinConfiguration\n" +
 				"nodeRegistration:\n" +
 				"  ignorePreflightErrors:\n" +
-				"  - some-preflight-check\n",
+				"  - some-preflight-check\n" +
+				"pause: {}\n" +
+				"proxy: {}\n" +
+				"registryMirror: {}\n",
 			wantErr: false,
 		},
 		{
@@ -418,12 +433,17 @@ func TestMarshalJoinConfigurationForVersion(t *testing.T) {
 				version: semver.MustParse("1.22.0"),
 			},
 			want: "apiVersion: kubeadm.k8s.io/v1beta3\n" + "" +
+				"bottlerocketBootstrap: {}\n" +
+				"bottlerocketControl: {}\n" +
 				"discovery: {}\n" +
 				"kind: JoinConfiguration\n" +
 				"nodeRegistration:\n" +
 				"  ignorePreflightErrors:\n" +
 				"  - some-preflight-check\n" +
-				"  taints: null\n",
+				"  taints: null\n" +
+				"pause: {}\n" +
+				"proxy: {}\n" +
+				"registryMirror: {}\n",
 			wantErr: false,
 		},
 		{
@@ -500,11 +520,16 @@ func TestUnmarshalClusterConfiguration(t *testing.T) {
 			args: args{
 				yaml: "apiServer: {}\n" +
 					"apiVersion: kubeadm.k8s.io/v1beta2\n" + "" +
+					"bottlerocketBootstrap: {}\n" +
+					"bottlerocketControl: {}\n" +
 					"controllerManager: {}\n" +
 					"dns: {}\n" +
 					"etcd: {}\n" +
 					"kind: ClusterConfiguration\n" +
 					"networking: {}\n" +
+					"pause: {}\n" +
+					"proxy: {}\n" +
+					"registryMirror: {}\n" +
 					"scheduler: {}\n",
 			},
 			want:    &bootstrapv1.ClusterConfiguration{},
@@ -515,11 +540,16 @@ func TestUnmarshalClusterConfiguration(t *testing.T) {
 			args: args{
 				yaml: "apiServer: {}\n" +
 					"apiVersion: kubeadm.k8s.io/v1beta3\n" + "" +
+					"bottlerocketBootstrap: {}\n" +
+					"bottlerocketControl: {}\n" +
 					"controllerManager: {}\n" +
 					"dns: {}\n" +
 					"etcd: {}\n" +
 					"kind: ClusterConfiguration\n" +
 					"networking: {}\n" +
+					"pause: {}\n" +
+					"proxy: {}\n" +
+					"registryMirror: {}\n" +
 					"scheduler: {}\n",
 			},
 			want:    &bootstrapv1.ClusterConfiguration{},

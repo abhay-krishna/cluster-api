@@ -214,6 +214,22 @@ spec:
                               In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                             type: string
                         type: object
+                      bottlerocketControl:
+                        description: |-
+                          BottlerocketControl holds the image source for control container
+                          This is only for bottlerocket
+                        properties:
+                          imageRepository:
+                            description: |-
+                              ImageRepository sets the container registry to pull images from.
+                              if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                            type: string
+                          imageTag:
+                            description: |-
+                              ImageTag allows to specify a tag for the image.
+                              In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                            type: string
+                        type: object
                       certificatesDir:
                         description: |-
                           CertificatesDir specifies where to store or look for all required certificates.
@@ -832,6 +848,22 @@ spec:
                       bottlerocketBootstrap:
                         description: |-
                           BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                          This is only for bottlerocket
+                        properties:
+                          imageRepository:
+                            description: |-
+                              ImageRepository sets the container registry to pull images from.
+                              if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                            type: string
+                          imageTag:
+                            description: |-
+                              ImageTag allows to specify a tag for the image.
+                              In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                            type: string
+                        type: object
+                      bottlerocketControl:
+                        description: |-
+                          BottlerocketControl holds the image source for control container
                           This is only for bottlerocket
                         properties:
                           imageRepository:
@@ -1494,6 +1526,22 @@ spec:
                               In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                             type: string
                         type: object
+                      bottlerocketControl:
+                        description: |-
+                          BottlerocketControl holds the image source for control container
+                          This is only for bottlerocket
+                        properties:
+                          imageRepository:
+                            description: |-
+                              ImageRepository sets the container registry to pull images from.
+                              if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                            type: string
+                          imageTag:
+                            description: |-
+                              ImageTag allows to specify a tag for the image.
+                              In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                            type: string
+                        type: object
                       certificatesDir:
                         description: |-
                           CertificatesDir specifies where to store or look for all required certificates.
@@ -2109,6 +2157,22 @@ spec:
                       bottlerocketBootstrap:
                         description: |-
                           BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                          This is only for bottlerocket
+                        properties:
+                          imageRepository:
+                            description: |-
+                              ImageRepository sets the container registry to pull images from.
+                              if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                            type: string
+                          imageTag:
+                            description: |-
+                              ImageTag allows to specify a tag for the image.
+                              In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                            type: string
+                        type: object
+                      bottlerocketControl:
+                        description: |-
+                          BottlerocketControl holds the image source for control container
                           This is only for bottlerocket
                         properties:
                           imageRepository:
@@ -2980,6 +3044,22 @@ spec:
                       bottlerocketBootstrap:
                         description: |-
                           BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                          This is only for bottlerocket
+                        properties:
+                          imageRepository:
+                            description: |-
+                              ImageRepository sets the container registry to pull images from.
+                              if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                            type: string
+                          imageTag:
+                            description: |-
+                              ImageTag allows to specify a tag for the image.
+                              In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                            type: string
+                        type: object
+                      bottlerocketControl:
+                        description: |-
+                          BottlerocketControl holds the image source for control container
                           This is only for bottlerocket
                         properties:
                           imageRepository:
@@ -4117,6 +4197,22 @@ spec:
                       bottlerocketBootstrap:
                         description: |-
                           BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+                          This is only for bottlerocket
+                        properties:
+                          imageRepository:
+                            description: |-
+                              ImageRepository sets the container registry to pull images from.
+                              if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                            type: string
+                          imageTag:
+                            description: |-
+                              ImageTag allows to specify a tag for the image.
+                              In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                            type: string
+                        type: object
+                      bottlerocketControl:
+                        description: |-
+                          BottlerocketControl holds the image source for control container
                           This is only for bottlerocket
                         properties:
                           imageRepository:

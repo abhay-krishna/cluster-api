@@ -353,7 +353,6 @@ func (r *Reconciler) reconcileInfrastructure(ctx context.Context, s *scope) (ctr
 					if machineIP == "" {
 						return ctrl.Result{}, fmt.Errorf("error getting etcd init IP address: %v", err)
 					}
-
 					secret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      etcdSecretName,
@@ -372,6 +371,7 @@ func (r *Reconciler) reconcileInfrastructure(ctx context.Context, s *scope) (ctr
 						},
 						Data: map[string][]byte{
 							"address": []byte(machineIP),
+							"clientUrls": []byte(fmt.Sprintf("https://%v:2379", machineIP)),
 						},
 						Type: clusterv1.ClusterSecretType,
 					}

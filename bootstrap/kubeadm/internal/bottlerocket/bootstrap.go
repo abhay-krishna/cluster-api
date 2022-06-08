@@ -16,6 +16,9 @@ standalone-mode = true
 authentication-mode = "tls"
 server-tls-bootstrap = false
 pod-infra-container-image = "{{.PauseContainerSource}}"
+{{- if (ne .ProviderId "")}}
+provider-id = "{{.ProviderId}}"
+{{- end -}}
 {{- end -}}
 `
 

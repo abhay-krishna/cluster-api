@@ -44,6 +44,7 @@ type BottlerocketSettingsInput struct {
 	RegistryMirrorCACert       string
 	NodeLabels                 string
 	Taints                     string
+	ProviderId                 string
 }
 
 type HostPath struct {
@@ -151,6 +152,7 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		RegistryMirrorEndpoint:     config.RegistryMirrorConfiguration.Endpoint,
 		NodeLabels:                 parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
 		Taints:                     parseTaints(config.Taints), //empty string if it does not exist
+		ProviderId:                 config.KubeletExtraArgs["provider-id"],
 	}
 	if config.BottlerocketControl.ImageRepository != "" && config.BottlerocketControl.ImageTag != "" {
 		bottlerocketInput.ControlContainerSource = fmt.Sprintf("%s:%s", config.BottlerocketControl.ImageRepository, config.BottlerocketControl.ImageTag)

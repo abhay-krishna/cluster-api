@@ -23,28 +23,26 @@ const (
 )
 
 type BottlerocketConfig struct {
-	Pause                       bootstrapv1.Pause
-	BottlerocketBootstrap       bootstrapv1.BottlerocketBootstrap
-	BottlerocketControl         bootstrapv1.BottlerocketControl
-	ProxyConfiguration          bootstrapv1.ProxyConfiguration
-	RegistryMirrorConfiguration bootstrapv1.RegistryMirrorConfiguration
-	KubeletExtraArgs            map[string]string
-	Taints                      []corev1.Taint
+	Pause                            bootstrapv1.Pause
+	BottlerocketBootstrap            bootstrapv1.BottlerocketBootstrap
+	BottlerocketControl              bootstrapv1.BottlerocketControl
+	ProxyConfiguration               bootstrapv1.ProxyConfiguration
+	RegistryMirrorConfiguration      bootstrapv1.RegistryMirrorConfiguration
+	KubeletExtraArgs                 map[string]string
+	Taints                           []corev1.Taint
+	BottlerocketCustomHostContainers []bootstrapv1.BottlerocketHostContainer
 }
 
 type BottlerocketSettingsInput struct {
-	BootstrapContainerUserData string
-	AdminContainerUserData     string
-	BootstrapContainerSource   string
-	ControlContainerSource     string
-	PauseContainerSource       string
-	HTTPSProxyEndpoint         string
-	NoProxyEndpoints           []string
-	RegistryMirrorEndpoint     string
-	RegistryMirrorCACert       string
-	NodeLabels                 string
-	Taints                     string
-	ProviderId                 string
+	PauseContainerSource   string
+	HTTPSProxyEndpoint     string
+	NoProxyEndpoints       []string
+	RegistryMirrorEndpoint string
+	RegistryMirrorCACert   string
+	NodeLabels             string
+	Taints                 string
+	ProviderId             string
+	HostContainers         []bootstrapv1.BottlerocketHostContainer
 }
 
 type HostPath struct {
@@ -87,16 +85,23 @@ func generateAdminContainerUserData(kind string, tpl string, data interface{}) (
 	return out.Bytes(), nil
 }
 
+func imageUrl(containerLocation bootstrapv1.ImageMeta) string {
+	if containerLocation.ImageRepository != "" && containerLocation.ImageTag != "" {
+		return fmt.Sprintf("%s:%s", containerLocation.ImageRepository, containerLocation.ImageTag)
+	}
+	return ""
+}
+
 func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, error) {
-	tm := template.New(kind).Funcs(template.FuncMap{"stringsJoin": strings.Join})
-	if _, err := tm.Parse(bootstrapHostContainerTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse hostContainer %s template", kind)
+	tm := template.New(kind).Funcs(template.FuncMap{
+		"stringsJoin": strings.Join,
+		"imageUrl":    imageUrl,
+	})
+	if _, err := tm.Parse(hostContainerTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse hostContainerSettings %s template", kind)
 	}
-	if _, err := tm.Parse(adminContainerInitTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse adminContainer %s template", kind)
-	}
-	if _, err := tm.Parse(controlContainerTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse controlContainer %s template", kind)
+	if _, err := tm.Parse(hostContainerSliceTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse hostContainerSettingsSlice %s template", kind)
 	}
 	if _, err := tm.Parse(kubernetesInitTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse kubernetes %s template", kind)
@@ -143,20 +148,42 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 	}
 	b64AdminContainerUserData := base64.StdEncoding.EncodeToString(adminContainerUserData)
 
-	bottlerocketInput := &BottlerocketSettingsInput{
-		BootstrapContainerUserData: b64BootstrapContainerUserData,
-		AdminContainerUserData:     b64AdminContainerUserData,
-		BootstrapContainerSource:   fmt.Sprintf("%s:%s", config.BottlerocketBootstrap.ImageRepository, config.BottlerocketBootstrap.ImageTag),
-		PauseContainerSource:       fmt.Sprintf("%s:%s", config.Pause.ImageRepository, config.Pause.ImageTag),
-		HTTPSProxyEndpoint:         config.ProxyConfiguration.HTTPSProxy,
-		RegistryMirrorEndpoint:     config.RegistryMirrorConfiguration.Endpoint,
-		NodeLabels:                 parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
-		Taints:                     parseTaints(config.Taints), //empty string if it does not exist
-		ProviderId:                 config.KubeletExtraArgs["provider-id"],
+	hostContainers := []bootstrapv1.BottlerocketHostContainer{
+		{
+			Name:         "admin",
+			Superpowered: true,
+			UserData:     b64AdminContainerUserData,
+		},
+		{
+			Name:         "kubeadm-bootstrap",
+			Superpowered: true,
+			ImageMeta:    config.BottlerocketBootstrap.ImageMeta,
+			UserData:     b64BootstrapContainerUserData,
+		},
 	}
+
 	if config.BottlerocketControl.ImageRepository != "" && config.BottlerocketControl.ImageTag != "" {
-		bottlerocketInput.ControlContainerSource = fmt.Sprintf("%s:%s", config.BottlerocketControl.ImageRepository, config.BottlerocketControl.ImageTag)
+		hostContainers = append(hostContainers, bootstrapv1.BottlerocketHostContainer{
+			Name:         "control",
+			Superpowered: false,
+			ImageMeta:    config.BottlerocketControl.ImageMeta,
+		})
 	}
+
+	if len(config.BottlerocketCustomHostContainers) != 0 {
+		hostContainers = append(hostContainers, config.BottlerocketCustomHostContainers...)
+	}
+
+	bottlerocketInput := &BottlerocketSettingsInput{
+		PauseContainerSource:   fmt.Sprintf("%s:%s", config.Pause.ImageRepository, config.Pause.ImageTag),
+		HTTPSProxyEndpoint:     config.ProxyConfiguration.HTTPSProxy,
+		RegistryMirrorEndpoint: config.RegistryMirrorConfiguration.Endpoint,
+		NodeLabels:             parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
+		Taints:                 parseTaints(config.Taints),                              //empty string if it does not exist
+		ProviderId:             config.KubeletExtraArgs["provider-id"],
+		HostContainers:         hostContainers,
+	}
+
 	if len(config.ProxyConfiguration.NoProxy) > 0 {
 		for _, noProxy := range config.ProxyConfiguration.NoProxy {
 			bottlerocketInput.NoProxyEndpoints = append(bottlerocketInput.NoProxyEndpoints, strconv.Quote(noProxy))
@@ -183,7 +210,7 @@ func parseTaints(taints []corev1.Taint) string {
 	taintsMap := make(map[string][]string)
 	for _, taint := range taints {
 		valueEffectString := fmt.Sprintf(taintValueEffectTemplate, taint.Value, taint.Effect)
-		taintsMap[taint.Key]= append(taintsMap[taint.Key], valueEffectString)
+		taintsMap[taint.Key] = append(taintsMap[taint.Key], valueEffectString)
 	}
 
 	var taintsToml strings.Builder

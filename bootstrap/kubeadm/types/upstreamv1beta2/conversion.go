@@ -93,6 +93,11 @@ func Convert_v1beta1_JoinConfiguration_To_upstreamv1beta2_JoinConfiguration(in *
 	return autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta2_JoinConfiguration(in, out, s)
 }
 
+func Convert_v1beta1_ClusterConfiguration_To_upstreamv1beta2_ClusterConfiguration(src *bootstrapv1.ClusterConfiguration, dst *ClusterConfiguration, s apimachineryconversion.Scope) error {
+	// ClusterConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.ClusterConfiguration but not in upstreamv1beta2
+	return autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta2_ClusterConfiguration(src, dst, s)
+}
+
 func Convert_v1beta1_NodeRegistrationOptions_To_upstreamv1beta2_NodeRegistrationOptions(in *bootstrapv1.NodeRegistrationOptions, out *NodeRegistrationOptions, s apimachineryconversion.Scope) error {
 	// NodeRegistrationOptions.ImagePullPolicy does not exit in
 	// kubeadm v1beta2 API.

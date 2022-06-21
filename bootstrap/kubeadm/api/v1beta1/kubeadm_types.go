@@ -170,6 +170,11 @@ type ClusterConfiguration struct {
 	// The cluster name
 	// +optional
 	ClusterName string `json:"clusterName,omitempty"`
+
+	// BottlerocketHostContainers contains the information of any additional images
+	// that we will deploy as host containers in the CPIs
+	// +optional
+	BottlerocketHostContainers []BottlerocketHostContainer `json:"bottlerocketCustomHostContainers,omitempty"`
 }
 
 // Pause defines the pause image repo and tag that should be run on the bootstrapped nodes.
@@ -537,6 +542,26 @@ type JoinConfiguration struct {
 	// "kubeadm join". The minimum kubernetes version needed to support Patches is v1.22
 	// +optional
 	Patches *Patches `json:"patches,omitempty"`
+
+	// BottlerocketCustomHostContainers contains the information of any additional images
+	// that we will deploy as host containers in the CPIs
+	// +optional
+	BottlerocketCustomHostContainers []BottlerocketHostContainer `json:"bottlerocketCustomHostContainers,omitempty"`
+}
+
+// BottlerocketHostContainer describes a host image for Bottlerocket
+type BottlerocketHostContainer struct {
+	// Name is the host container name that will be given to the container in BR's `apiserver`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// Superpowered indicates if the container will be superpowered
+	// +kubebuilder:validation:Required
+	Superpowered bool `json:"superpowered"`
+	// ImageMeta is the actual location of the container image
+	ImageMeta `json:"source"`
+	// UserData is the userdata that will be attached to the image.
+	// +optional
+	UserData string `json:"userData,omitempty"`
 }
 
 // JoinControlPlane contains elements describing an additional control plane instance to be deployed on the joining node.

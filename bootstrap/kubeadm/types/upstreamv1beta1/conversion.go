@@ -95,3 +95,8 @@ func Convert_v1beta1_JoinConfiguration_To_upstreamv1beta1_JoinConfiguration(in *
 	// JoinConfiguration.Patches does not exist in kubeadm v1beta1 API
 	return autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta1_JoinConfiguration(in, out, s)
 }
+
+func Convert_v1beta1_ClusterConfiguration_To_upstreamv1beta1_ClusterConfiguration(src *bootstrapv1.ClusterConfiguration, dst *ClusterConfiguration, s apimachineryconversion.Scope) error {
+	// ClusterConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.ClusterConfiguration but not in upstreamv1beta1
+	return autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta1_ClusterConfiguration(src, dst, s)
+}

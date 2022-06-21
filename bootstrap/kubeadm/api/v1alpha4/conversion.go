@@ -210,6 +210,11 @@ func Convert_v1beta1_User_To_v1alpha4_User(in *bootstrapv1.User, out *User, s ap
 	return autoConvert_v1beta1_User_To_v1alpha4_User(in, out, s)
 }
 
+func Convert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(in *bootstrapv1.ClusterConfiguration, out *ClusterConfiguration, s apiconversion.Scope) error {
+	// ClusterConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.ClusterConfiguration but not in v1alpha4
+	return autoConvert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(in, out, s)
+}
+
 func Convert_v1beta1_NodeRegistrationOptions_To_v1alpha4_NodeRegistrationOptions(in *bootstrapv1.NodeRegistrationOptions, out *NodeRegistrationOptions, s apiconversion.Scope) error {
 	// NodeRegistrationOptions.ImagePullPolicy does not exit in
 	// kubeadm v1alpha4 API.

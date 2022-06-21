@@ -561,6 +561,7 @@ func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta2_ClusterConfigur
 	out.ImageRepository = in.ImageRepository
 	out.FeatureGates = *(*map[string]bool)(unsafe.Pointer(&in.FeatureGates))
 	out.ClusterName = in.ClusterName
+	// WARNING: in.BottlerocketHostContainers requires manual conversion: does not exist in peer-type
 	return nil
 }
 
@@ -898,6 +899,7 @@ func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta2_JoinConfiguration(
 	}
 	// WARNING: in.SkipPhases requires manual conversion: does not exist in peer-type
 	// WARNING: in.Patches requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketCustomHostContainers requires manual conversion: does not exist in peer-type
 	return nil
 }
 

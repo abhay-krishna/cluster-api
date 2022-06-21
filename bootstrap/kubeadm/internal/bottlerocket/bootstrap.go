@@ -3,12 +3,6 @@
 package bottlerocket
 
 const (
-	adminContainerInitTemplate = `{{ define "adminContainerInitSettings" -}}
-[settings.host-containers.admin]
-enabled = true
-user-data = "{{.AdminContainerUserData}}"
-{{- end -}}
-`
 	kubernetesInitTemplate = `{{ define "kubernetesInitSettings" -}}
 [settings.kubernetes]
 cluster-domain = "cluster.local"
@@ -22,14 +16,26 @@ provider-id = "{{.ProviderId}}"
 {{- end -}}
 `
 
-	bootstrapHostContainerTemplate = `{{define "bootstrapHostContainerSettings" -}}
-[settings.host-containers.kubeadm-bootstrap]
+	hostContainerTemplate = `{{define "hostContainerSettings" -}}
+[settings.host-containers.{{.Name}}]
 enabled = true
-superpowered = true
-source = "{{.BootstrapContainerSource}}"
-user-data = "{{.BootstrapContainerUserData}}"
+superpowered = {{.Superpowered}}
+{{- if (ne (imageUrl .ImageMeta) "")}}
+source = "{{imageUrl .ImageMeta}}"
+{{- end -}}
+{{- if (ne .UserData "")}}
+user-data = "{{.UserData}}"
+{{- end -}}
 {{- end -}}
 `
+
+	hostContainerSliceTemplate = `{{define "hostContainerSlice" -}}
+{{- range $hContainer := .HostContainers }}
+{{template "hostContainerSettings" $hContainer }}
+{{- end -}}
+{{- end -}}
+`
+
 	networkInitTemplate = `{{ define "networkInitSettings" -}}
 [settings.network]
 https-proxy = "{{.HTTPSProxyEndpoint}}"
@@ -58,17 +64,7 @@ trusted=true
 {{- end -}}
 `
 
-	controlContainerTemplate = `{{ define "controlContainerSettings" -}}
-[settings.host-containers.control]
-enabled = true
-superpowered = false
-source = "{{.ControlContainerSource}}"
-{{- end -}}
-`
-
-	bottlerocketNodeInitSettingsTemplate = `{{template "bootstrapHostContainerSettings" .}}
-
-{{template "adminContainerInitSettings" .}}
+	bottlerocketNodeInitSettingsTemplate = `{{template "hostContainerSlice" .}}
 
 {{template "kubernetesInitSettings" .}}
 
@@ -90,10 +86,6 @@ source = "{{.ControlContainerSource}}"
 
 {{- if (ne .Taints "")}}
 {{template "taintsTemplate" .}}
-{{- end -}}
-
-{{- if (ne .ControlContainerSource "")}}
-{{template "controlContainerSettings" .}}
 {{- end -}}
 `
 )

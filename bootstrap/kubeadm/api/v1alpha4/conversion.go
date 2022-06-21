@@ -179,3 +179,8 @@ func Convert_v1beta1_User_To_v1alpha4_User(in *bootstrapv1.User, out *User, s ap
 	// User.PasswdFrom does not exist in kubeadm v1alpha4 API.
 	return autoConvert_v1beta1_User_To_v1alpha4_User(in, out, s)
 }
+
+func Convert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(in *bootstrapv1.ClusterConfiguration, out *ClusterConfiguration, s apiconversion.Scope) error {
+	// ClusterConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.ClusterConfiguration but not in v1alpha4
+	return autoConvert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(in, out, s)
+}

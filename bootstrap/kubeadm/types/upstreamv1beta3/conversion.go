@@ -78,3 +78,13 @@ func Convert_upstreamv1beta3_JoinControlPlane_To_v1beta1_JoinControlPlane(in *Jo
 	// JoinControlPlane.CertificateKey exists in v1beta3 types but not in bootstrapv1.JoinControlPlane (Cluster API does not uses automatic copy certs). Ignoring when converting.
 	return autoConvert_upstreamv1beta3_JoinControlPlane_To_v1beta1_JoinControlPlane(in, out, s)
 }
+
+func Convert_v1beta1_ClusterConfiguration_To_upstreamv1beta3_ClusterConfiguration(src *bootstrapv1.ClusterConfiguration, dst *ClusterConfiguration, s apimachineryconversion.Scope) error {
+	// ClusterConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.ClusterConfiguration but not in upstreamv1beta3
+	return autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta3_ClusterConfiguration(src, dst, s)
+}
+
+func Convert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(src *bootstrapv1.JoinConfiguration, dst *JoinConfiguration, s apimachineryconversion.Scope) error {
+	// JoinConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.JoinControlPlane but not in upstreamv1beta3
+	return autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(src, dst, s)
+}

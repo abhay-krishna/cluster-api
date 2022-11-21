@@ -420,13 +420,13 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
-	if err := s.AddConversionFunc((*v1beta1.File)(nil), (*File)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1beta1_File_To_v1alpha4_File(a.(*v1beta1.File), b.(*File), scope)
+	if err := s.AddConversionFunc((*v1beta1.ClusterConfiguration)(nil), (*ClusterConfiguration)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(a.(*v1beta1.ClusterConfiguration), b.(*ClusterConfiguration), scope)
 	}); err != nil {
 		return err
 	}
-	if err := s.AddConversionFunc((*v1beta1.ClusterConfiguration)(nil), (*ClusterConfiguration)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(a.(*v1beta1.ClusterConfiguration), b.(*ClusterConfiguration), scope)
+	if err := s.AddConversionFunc((*v1beta1.File)(nil), (*File)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_File_To_v1alpha4_File(a.(*v1beta1.File), b.(*File), scope)
 	}); err != nil {
 		return err
 	}
@@ -728,6 +728,7 @@ func autoConvert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(i
 	out.FeatureGates = *(*map[string]bool)(unsafe.Pointer(&in.FeatureGates))
 	out.ClusterName = in.ClusterName
 	// WARNING: in.BottlerocketHostContainers requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
 	return nil
 }
 
@@ -1133,6 +1134,7 @@ func autoConvert_v1beta1_JoinConfiguration_To_v1alpha4_JoinConfiguration(in *v1b
 	// WARNING: in.SkipPhases requires manual conversion: does not exist in peer-type
 	// WARNING: in.Patches requires manual conversion: does not exist in peer-type
 	// WARNING: in.BottlerocketCustomHostContainers requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
 	return nil
 }
 

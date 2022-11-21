@@ -36,6 +36,26 @@ user-data = "{{.UserData}}"
 {{- end -}}
 `
 
+	bootstrapContainerTemplate = `{{ define "bootstrapContainerSettings" -}}
+[settings.bootstrap-containers.{{.Name}}]
+essential = {{.Essential}}
+mode = "{{.Mode}}"
+{{- if (ne (imageUrl .ImageMeta) "")}}
+source = "{{imageUrl .ImageMeta}}"
+{{- end -}}
+{{- if (ne .UserData "")}}
+user-data = "{{.UserData}}"
+{{- end -}}
+{{- end -}}
+`
+
+	bootstrapContainerSliceTemplate = `{{ define "bootstrapContainerSlice" -}}
+{{- range $bContainer := .BootstrapContainers }}
+{{template "bootstrapContainerSettings" $bContainer }}
+{{- end -}}
+{{- end -}}
+`
+
 	networkInitTemplate = `{{ define "networkInitSettings" -}}
 [settings.network]
 https-proxy = "{{.HTTPSProxyEndpoint}}"
@@ -67,6 +87,10 @@ trusted=true
 	bottlerocketNodeInitSettingsTemplate = `{{template "hostContainerSlice" .}}
 
 {{template "kubernetesInitSettings" .}}
+
+{{- if .BootstrapContainers}}
+{{template "bootstrapContainerSlice" .}}
+{{- end -}}
 
 {{- if (ne .HTTPSProxyEndpoint "")}}
 {{template "networkInitSettings" .}}

@@ -151,6 +151,50 @@ spec:
                                   In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                                 type: string
                             type: object
+                          bottlerocketCustomBootstrapContainers:
+                            description: |-
+                              BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+                              This is only for bottlerocket.
+                            items:
+                              description: BottlerocketBootstrapContainer holds the
+                                bootstrap container setting for Bottlerocket
+                              properties:
+                                essential:
+                                  description: |-
+                                    Essential decides whether or not the container should fail the boot process.
+                                    Bootstrap containers configured with essential = true will stop the boot process if they exit code is a non-zero value.
+                                    Default is false.
+                                  type: boolean
+                                imageRepository:
+                                  description: |-
+                                    ImageRepository sets the container registry to pull images from.
+                                    if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                                  type: string
+                                imageTag:
+                                  description: |-
+                                    ImageTag allows to specify a tag for the image.
+                                    In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                                  type: string
+                                mode:
+                                  description: Mode represents the bootstrap container
+                                    mode.
+                                  enum:
+                                  - always
+                                  - "off"
+                                  - once
+                                  type: string
+                                name:
+                                  description: Name is the bootstrap container name
+                                    that will be given to the container in BR's `apiserver`.
+                                  type: string
+                                userData:
+                                  description: UserData is the base64-encoded userdata.
+                                  type: string
+                              required:
+                              - mode
+                              - name
+                              type: object
+                            type: array
                           bottlerocketCustomHostContainers:
                             description: |-
                               BottlerocketHostContainers contains the information of any additional images
@@ -840,6 +884,50 @@ spec:
                                   In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                                 type: string
                             type: object
+                          bottlerocketCustomBootstrapContainers:
+                            description: |-
+                              BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+                              This is only for bottlerocket.
+                            items:
+                              description: BottlerocketBootstrapContainer holds the
+                                bootstrap container setting for Bottlerocket
+                              properties:
+                                essential:
+                                  description: |-
+                                    Essential decides whether or not the container should fail the boot process.
+                                    Bootstrap containers configured with essential = true will stop the boot process if they exit code is a non-zero value.
+                                    Default is false.
+                                  type: boolean
+                                imageRepository:
+                                  description: |-
+                                    ImageRepository sets the container registry to pull images from.
+                                    if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                                  type: string
+                                imageTag:
+                                  description: |-
+                                    ImageTag allows to specify a tag for the image.
+                                    In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                                  type: string
+                                mode:
+                                  description: Mode represents the bootstrap container
+                                    mode.
+                                  enum:
+                                  - always
+                                  - "off"
+                                  - once
+                                  type: string
+                                name:
+                                  description: Name is the bootstrap container name
+                                    that will be given to the container in BR's `apiserver`.
+                                  type: string
+                                userData:
+                                  description: UserData is the base64-encoded userdata.
+                                  type: string
+                              required:
+                              - mode
+                              - name
+                              type: object
+                            type: array
                           bottlerocketCustomHostContainers:
                             description: |-
                               BottlerocketCustomHostContainers contains the information of any additional images
@@ -1346,6 +1434,50 @@ spec:
                                   In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                                 type: string
                             type: object
+                          bottlerocketCustomBootstrapContainers:
+                            description: |-
+                              BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+                              This is only for bottlerocket.
+                            items:
+                              description: BottlerocketBootstrapContainer holds the
+                                bootstrap container setting for Bottlerocket
+                              properties:
+                                essential:
+                                  description: |-
+                                    Essential decides whether or not the container should fail the boot process.
+                                    Bootstrap containers configured with essential = true will stop the boot process if they exit code is a non-zero value.
+                                    Default is false.
+                                  type: boolean
+                                imageRepository:
+                                  description: |-
+                                    ImageRepository sets the container registry to pull images from.
+                                    if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                                  type: string
+                                imageTag:
+                                  description: |-
+                                    ImageTag allows to specify a tag for the image.
+                                    In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                                  type: string
+                                mode:
+                                  description: Mode represents the bootstrap container
+                                    mode.
+                                  enum:
+                                  - always
+                                  - "off"
+                                  - once
+                                  type: string
+                                name:
+                                  description: Name is the bootstrap container name
+                                    that will be given to the container in BR's `apiserver`.
+                                  type: string
+                                userData:
+                                  description: UserData is the base64-encoded userdata.
+                                  type: string
+                              required:
+                              - mode
+                              - name
+                              type: object
+                            type: array
                           bottlerocketCustomHostContainers:
                             description: |-
                               BottlerocketHostContainers contains the information of any additional images
@@ -2032,6 +2164,50 @@ spec:
                                   In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                                 type: string
                             type: object
+                          bottlerocketCustomBootstrapContainers:
+                            description: |-
+                              BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+                              This is only for bottlerocket.
+                            items:
+                              description: BottlerocketBootstrapContainer holds the
+                                bootstrap container setting for Bottlerocket
+                              properties:
+                                essential:
+                                  description: |-
+                                    Essential decides whether or not the container should fail the boot process.
+                                    Bootstrap containers configured with essential = true will stop the boot process if they exit code is a non-zero value.
+                                    Default is false.
+                                  type: boolean
+                                imageRepository:
+                                  description: |-
+                                    ImageRepository sets the container registry to pull images from.
+                                    if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                                  type: string
+                                imageTag:
+                                  description: |-
+                                    ImageTag allows to specify a tag for the image.
+                                    In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                                  type: string
+                                mode:
+                                  description: Mode represents the bootstrap container
+                                    mode.
+                                  enum:
+                                  - always
+                                  - "off"
+                                  - once
+                                  type: string
+                                name:
+                                  description: Name is the bootstrap container name
+                                    that will be given to the container in BR's `apiserver`.
+                                  type: string
+                                userData:
+                                  description: UserData is the base64-encoded userdata.
+                                  type: string
+                              required:
+                              - mode
+                              - name
+                              type: object
+                            type: array
                           bottlerocketCustomHostContainers:
                             description: |-
                               BottlerocketCustomHostContainers contains the information of any additional images
@@ -2690,6 +2866,50 @@ spec:
                                   In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                                 type: string
                             type: object
+                          bottlerocketCustomBootstrapContainers:
+                            description: |-
+                              BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+                              This is only for bottlerocket.
+                            items:
+                              description: BottlerocketBootstrapContainer holds the
+                                bootstrap container setting for Bottlerocket
+                              properties:
+                                essential:
+                                  description: |-
+                                    Essential decides whether or not the container should fail the boot process.
+                                    Bootstrap containers configured with essential = true will stop the boot process if they exit code is a non-zero value.
+                                    Default is false.
+                                  type: boolean
+                                imageRepository:
+                                  description: |-
+                                    ImageRepository sets the container registry to pull images from.
+                                    if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                                  type: string
+                                imageTag:
+                                  description: |-
+                                    ImageTag allows to specify a tag for the image.
+                                    In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                                  type: string
+                                mode:
+                                  description: Mode represents the bootstrap container
+                                    mode.
+                                  enum:
+                                  - always
+                                  - "off"
+                                  - once
+                                  type: string
+                                name:
+                                  description: Name is the bootstrap container name
+                                    that will be given to the container in BR's `apiserver`.
+                                  type: string
+                                userData:
+                                  description: UserData is the base64-encoded userdata.
+                                  type: string
+                              required:
+                              - mode
+                              - name
+                              type: object
+                            type: array
                           bottlerocketCustomHostContainers:
                             description: |-
                               BottlerocketHostContainers contains the information of any additional images
@@ -3882,6 +4102,50 @@ spec:
                                   In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
                                 type: string
                             type: object
+                          bottlerocketCustomBootstrapContainers:
+                            description: |-
+                              BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+                              This is only for bottlerocket.
+                            items:
+                              description: BottlerocketBootstrapContainer holds the
+                                bootstrap container setting for Bottlerocket
+                              properties:
+                                essential:
+                                  description: |-
+                                    Essential decides whether or not the container should fail the boot process.
+                                    Bootstrap containers configured with essential = true will stop the boot process if they exit code is a non-zero value.
+                                    Default is false.
+                                  type: boolean
+                                imageRepository:
+                                  description: |-
+                                    ImageRepository sets the container registry to pull images from.
+                                    if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                                  type: string
+                                imageTag:
+                                  description: |-
+                                    ImageTag allows to specify a tag for the image.
+                                    In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                                  type: string
+                                mode:
+                                  description: Mode represents the bootstrap container
+                                    mode.
+                                  enum:
+                                  - always
+                                  - "off"
+                                  - once
+                                  type: string
+                                name:
+                                  description: Name is the bootstrap container name
+                                    that will be given to the container in BR's `apiserver`.
+                                  type: string
+                                userData:
+                                  description: UserData is the base64-encoded userdata.
+                                  type: string
+                              required:
+                              - mode
+                              - name
+                              type: object
+                            type: array
                           bottlerocketCustomHostContainers:
                             description: |-
                               BottlerocketCustomHostContainers contains the information of any additional images

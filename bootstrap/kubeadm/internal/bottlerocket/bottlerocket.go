@@ -23,14 +23,15 @@ const (
 )
 
 type BottlerocketConfig struct {
-	Pause                            bootstrapv1.Pause
-	BottlerocketBootstrap            bootstrapv1.BottlerocketBootstrap
-	BottlerocketControl              bootstrapv1.BottlerocketControl
-	ProxyConfiguration               bootstrapv1.ProxyConfiguration
-	RegistryMirrorConfiguration      bootstrapv1.RegistryMirrorConfiguration
-	KubeletExtraArgs                 map[string]string
-	Taints                           []corev1.Taint
-	BottlerocketCustomHostContainers []bootstrapv1.BottlerocketHostContainer
+	Pause                                 bootstrapv1.Pause
+	BottlerocketBootstrap                 bootstrapv1.BottlerocketBootstrap
+	BottlerocketControl                   bootstrapv1.BottlerocketControl
+	ProxyConfiguration                    bootstrapv1.ProxyConfiguration
+	RegistryMirrorConfiguration           bootstrapv1.RegistryMirrorConfiguration
+	KubeletExtraArgs                      map[string]string
+	Taints                                []corev1.Taint
+	BottlerocketCustomHostContainers      []bootstrapv1.BottlerocketHostContainer
+	BottlerocketCustomBootstrapContainers []bootstrapv1.BottlerocketBootstrapContainer
 }
 
 type BottlerocketSettingsInput struct {
@@ -43,6 +44,7 @@ type BottlerocketSettingsInput struct {
 	Taints                 string
 	ProviderId             string
 	HostContainers         []bootstrapv1.BottlerocketHostContainer
+	BootstrapContainers    []bootstrapv1.BottlerocketBootstrapContainer
 }
 
 type HostPath struct {
@@ -102,6 +104,12 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	}
 	if _, err := tm.Parse(hostContainerSliceTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse hostContainerSettingsSlice %s template", kind)
+	}
+	if _, err := tm.Parse(bootstrapContainerTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse bootstrapContainerSettings %s template", kind)
+	}
+	if _, err := tm.Parse(bootstrapContainerSliceTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse bootstrapContainerSettingsSlice %s template", kind)
 	}
 	if _, err := tm.Parse(kubernetesInitTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse kubernetes %s template", kind)
@@ -179,9 +187,10 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		HTTPSProxyEndpoint:     config.ProxyConfiguration.HTTPSProxy,
 		RegistryMirrorEndpoint: config.RegistryMirrorConfiguration.Endpoint,
 		NodeLabels:             parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
-		Taints:                 parseTaints(config.Taints),                              //empty string if it does not exist
+		Taints:                 parseTaints(config.Taints),                              // empty string if it does not exist
 		ProviderId:             config.KubeletExtraArgs["provider-id"],
 		HostContainers:         hostContainers,
+		BootstrapContainers:    config.BottlerocketCustomBootstrapContainers,
 	}
 
 	if len(config.ProxyConfiguration.NoProxy) > 0 {

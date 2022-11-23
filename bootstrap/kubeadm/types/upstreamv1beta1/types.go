@@ -65,6 +65,11 @@ type ClusterConfiguration struct {
 	// +optional
 	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
 
+	// BottlerocketAdmin holds the image source for admin container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketAdmin BottlerocketAdmin `json:"bottlerocketAdmin,omitempty"`
+
 	// BottlerocketControl holds the image source for control container
 	// This is only for bottlerocket
 	// +optional
@@ -172,6 +177,13 @@ type Pause struct {
 // This setting is ONLY for bottlerocket nodes.
 type BottlerocketBootstrap struct {
 	// ImageMeta allows to customize the image used for the BottlerocketBootstrap component
+	ImageMeta `json:",inline"`
+}
+
+// BottlerocketAdmin holds the settings of admin container for bottlerocket nodes
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketAdmin struct {
+	// ImageMeta allows to customize the image used for the BottlerocketAdmin component
 	ImageMeta `json:",inline"`
 }
 
@@ -410,6 +422,11 @@ type JoinConfiguration struct {
 	// This is only for bottlerocket
 	// +optional
 	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
+
+	// BottlerocketAdmin holds the image source for admin container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketAdmin BottlerocketAdmin `json:"bottlerocketAdmin,omitempty"`
 
 	// BottlerocketControl holds the image source for control container
 	// This is only for bottlerocket

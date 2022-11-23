@@ -114,6 +114,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketAdmin:
+                    description: |-
+                      BottlerocketAdmin holds the image source for admin container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   bottlerocketBootstrap:
                     description: |-
                       BottlerocketBootstrap holds the image source for kubeadm bootstrap container
@@ -836,6 +852,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketAdmin:
+                    description: |-
+                      BottlerocketAdmin holds the image source for admin container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   bottlerocketBootstrap:
                     description: |-
                       BottlerocketBootstrap holds the image source for kubeadm bootstrap container
@@ -1450,6 +1482,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketAdmin:
+                    description: |-
+                      BottlerocketAdmin holds the image source for admin container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   bottlerocketBootstrap:
                     description: |-
                       BottlerocketBootstrap holds the image source for kubeadm bootstrap container
@@ -2168,6 +2216,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketAdmin:
+                    description: |-
+                      BottlerocketAdmin holds the image source for admin container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   bottlerocketBootstrap:
                     description: |-
                       BottlerocketBootstrap holds the image source for kubeadm bootstrap container
@@ -2901,6 +2965,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketAdmin:
+                    description: |-
+                      BottlerocketAdmin holds the image source for admin container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   bottlerocketBootstrap:
                     description: |-
                       BottlerocketBootstrap holds the image source for kubeadm bootstrap container
@@ -4121,6 +4201,22 @@ spec:
                       may reject unrecognized values.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                     type: string
+                  bottlerocketAdmin:
+                    description: |-
+                      BottlerocketAdmin holds the image source for admin container
+                      This is only for bottlerocket
+                    properties:
+                      imageRepository:
+                        description: |-
+                          ImageRepository sets the container registry to pull images from.
+                          if not set, the ImageRepository defined in ClusterConfiguration will be used instead.
+                        type: string
+                      imageTag:
+                        description: |-
+                          ImageTag allows to specify a tag for the image.
+                          In case this value is set, kubeadm does not change automatically the version of the above components during upgrades.
+                        type: string
+                    type: object
                   bottlerocketBootstrap:
                     description: |-
                       BottlerocketBootstrap holds the image source for kubeadm bootstrap container

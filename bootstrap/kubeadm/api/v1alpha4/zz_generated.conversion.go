@@ -694,6 +694,7 @@ func autoConvert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(i
 	if err := Convert_v1beta1_BottlerocketBootstrap_To_v1alpha4_BottlerocketBootstrap(&in.BottlerocketBootstrap, &out.BottlerocketBootstrap, s); err != nil {
 		return err
 	}
+	// WARNING: in.BottlerocketAdmin requires manual conversion: does not exist in peer-type
 	if err := Convert_v1beta1_BottlerocketControl_To_v1alpha4_BottlerocketControl(&in.BottlerocketControl, &out.BottlerocketControl, s); err != nil {
 		return err
 	}
@@ -1114,6 +1115,7 @@ func autoConvert_v1beta1_JoinConfiguration_To_v1alpha4_JoinConfiguration(in *v1b
 	if err := Convert_v1beta1_BottlerocketBootstrap_To_v1alpha4_BottlerocketBootstrap(&in.BottlerocketBootstrap, &out.BottlerocketBootstrap, s); err != nil {
 		return err
 	}
+	// WARNING: in.BottlerocketAdmin requires manual conversion: does not exist in peer-type
 	if err := Convert_v1beta1_BottlerocketControl_To_v1alpha4_BottlerocketControl(&in.BottlerocketControl, &out.BottlerocketControl, s); err != nil {
 		return err
 	}

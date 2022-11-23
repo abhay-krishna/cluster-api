@@ -25,6 +25,7 @@ const (
 type BottlerocketConfig struct {
 	Pause                                 bootstrapv1.Pause
 	BottlerocketBootstrap                 bootstrapv1.BottlerocketBootstrap
+	BottlerocketAdmin                     bootstrapv1.BottlerocketAdmin
 	BottlerocketControl                   bootstrapv1.BottlerocketControl
 	ProxyConfiguration                    bootstrapv1.ProxyConfiguration
 	RegistryMirrorConfiguration           bootstrapv1.RegistryMirrorConfiguration
@@ -160,6 +161,7 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		{
 			Name:         "admin",
 			Superpowered: true,
+			ImageMeta:    config.BottlerocketAdmin.ImageMeta,
 			UserData:     b64AdminContainerUserData,
 		},
 		{

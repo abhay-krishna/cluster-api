@@ -25,6 +25,9 @@ const (
 
 	// TLSCrtDataName is the key used to store a TLS certificate in the secret's data field.
 	TLSCrtDataName = "tls.crt"
+
+	// RegistryCredentials is the secret name of secret containing registryMirror credentials.
+	RegistryCredentials = "registry-credentials"
 )
 
 // Purpose is the name to append to the secret generated for a cluster.

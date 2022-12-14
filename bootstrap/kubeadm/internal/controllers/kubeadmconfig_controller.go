@@ -65,6 +65,11 @@ const (
 	DefaultTokenTTL = 15 * time.Minute
 )
 
+const (
+	RegistryUsername = "username"
+	RegistryPassword = "password"
+)
+
 // InitLocker is a lock that is used around kubeadm init.
 type InitLocker interface {
 	Lock(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine) bool
@@ -484,6 +489,13 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 		}
 		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.ClusterConfiguration.RegistryMirror
+			registryUsername, registryPassword, err := r.resolveRegistryCredentials(ctx, scope.Config)
+			if err != nil {
+				scope.Info("Cannot find secret for registry credentials, proceeding without registry credentials")
+			} else {
+				bottlerocketConfig.RegistryMirrorCredentials.Username = string(registryUsername)
+				bottlerocketConfig.RegistryMirrorCredentials.Password = string(registryPassword)
+			}
 		}
 		if scope.Config.Spec.InitConfiguration.NodeRegistration.KubeletExtraArgs != nil {
 			bottlerocketConfig.KubeletExtraArgs = scope.Config.Spec.InitConfiguration.NodeRegistration.KubeletExtraArgs
@@ -491,6 +503,7 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 		if len(scope.Config.Spec.InitConfiguration.NodeRegistration.Taints) > 0 {
 			bottlerocketConfig.Taints = scope.Config.Spec.InitConfiguration.NodeRegistration.Taints
 		}
+
 	}
 
 	clusterdata, err := kubeadmtypes.MarshalClusterConfigurationForVersion(scope.Config.Spec.ClusterConfiguration, parsedVersion)
@@ -692,6 +705,13 @@ func (r *KubeadmConfigReconciler) joinWorker(ctx context.Context, scope *Scope) 
 		}
 		if scope.Config.Spec.JoinConfiguration.RegistryMirror.Endpoint != "" {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.JoinConfiguration.RegistryMirror
+			registryUsername, registryPassword, err := r.resolveRegistryCredentials(ctx, scope.Config)
+			if err != nil {
+				scope.Info("Cannot find secret for registry credentials, proceeding without registry credentials”")
+			} else {
+				bottlerocketConfig.RegistryMirrorCredentials.Username = string(registryUsername)
+				bottlerocketConfig.RegistryMirrorCredentials.Password = string(registryPassword)
+			}
 		}
 		if scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs != nil {
 			bottlerocketConfig.KubeletExtraArgs = scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs
@@ -822,6 +842,13 @@ func (r *KubeadmConfigReconciler) joinControlplane(ctx context.Context, scope *S
 		}
 		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.ClusterConfiguration.RegistryMirror
+			registryUsername, registryPassword, err := r.resolveRegistryCredentials(ctx, scope.Config)
+			if err != nil {
+				scope.Info("Cannot find secret for registry credentials, proceeding without registry credentials”")
+			} else {
+				bottlerocketConfig.RegistryMirrorCredentials.Username = string(registryUsername)
+				bottlerocketConfig.RegistryMirrorCredentials.Password = string(registryPassword)
+			}
 		}
 		if scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs != nil {
 			bottlerocketConfig.KubeletExtraArgs = scope.Config.Spec.JoinConfiguration.NodeRegistration.KubeletExtraArgs
@@ -926,6 +953,27 @@ func (r *KubeadmConfigReconciler) resolveSecretPasswordContent(ctx context.Conte
 		return nil, errors.Errorf("secret references non-existent secret key: %q", source.PasswdFrom.Secret.Key)
 	}
 	return data, nil
+}
+
+// resolveRegistryCredentials returns username and password fetched from a secret object.
+func (r *KubeadmConfigReconciler) resolveRegistryCredentials(ctx context.Context, source *bootstrapv1.KubeadmConfig) ([]byte, []byte, error) {
+	key := types.NamespacedName{Namespace: source.Namespace, Name: secret.RegistryCredentials}
+	secret := &corev1.Secret{}
+	if err := r.Client.Get(ctx, key, secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil, errors.Wrapf(err, "secret not found: %s", key)
+		}
+		return nil, nil, errors.Wrapf(err, "failed to retrieve Secret %q", key)
+	}
+	username, ok := secret.Data[RegistryUsername]
+	if !ok {
+		return nil, nil, errors.Errorf("secret references non-existent secret key: %q", "username")
+	}
+	password, ok := secret.Data[RegistryPassword]
+	if !ok {
+		return nil, nil, errors.Errorf("secret references non-existent secret key: %q", "password")
+	}
+	return username, password, nil
 }
 
 // ClusterToKubeadmConfigs is a handler.ToRequestsFunc to be used to enqueue

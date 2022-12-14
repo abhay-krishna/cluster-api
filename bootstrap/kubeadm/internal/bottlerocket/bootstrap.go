@@ -73,6 +73,20 @@ data = "{{.RegistryMirrorCACert}}"
 trusted=true
 {{- end -}}
 `
+	// We need to assign creds for "public.ecr.aws" because host-ctr expects credentials to be assigned
+	// to "public.ecr.aws" rather than the mirror's endpoint
+	// TODO: Once the bottlerocket fixes are in we need to remove the "public.ecr.aws" creds
+	registryMirrorCredentialsTemplate = `{{define "registryMirrorCredentialsSettings" -}}
+[[settings.container-registry.credentials]]
+registry = "public.ecr.aws"
+username = "{{.RegistryMirrorUsername}}"
+password = "{{.RegistryMirrorPassword}}"
+[[settings.container-registry.credentials]]
+registry = "{{.RegistryMirrorEndpoint}}"
+username = "{{.RegistryMirrorUsername}}"
+password = "{{.RegistryMirrorPassword}}"
+{{- end -}}
+`
 	nodeLabelsTemplate = `{{ define "nodeLabelSettings" -}}
 [settings.kubernetes.node-labels]
 {{.NodeLabels}}
@@ -102,6 +116,10 @@ trusted=true
 
 {{- if (ne .RegistryMirrorCACert "")}}
 {{template "registryMirrorCACertSettings" .}}
+{{- end -}}
+
+{{- if and (ne .RegistryMirrorUsername "") (ne .RegistryMirrorPassword "")}}
+{{template "registryMirrorCredentialsSettings" .}}
 {{- end -}}
 
 {{- if (ne .NodeLabels "")}}

@@ -370,7 +370,7 @@ func (r *Reconciler) reconcileInfrastructure(ctx context.Context, s *scope) (ctr
 							},
 						},
 						Data: map[string][]byte{
-							"address": []byte(machineIP),
+							"address":    []byte(machineIP),
 							"clientUrls": []byte(fmt.Sprintf("https://%v:2379", machineIP)),
 						},
 						Type: clusterv1.ClusterSecretType,

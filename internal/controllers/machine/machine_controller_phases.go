@@ -72,8 +72,7 @@ func (r *Reconciler) reconcilePhase(_ context.Context, m *clusterv1.Machine) {
 	}
 
 	if _, ok := m.Labels[clusterv1.MachineEtcdClusterLabelName]; ok {
-		// Status.NodeRef does not get set for etcd machines since they don't correspond to k8s node objects
-		if m.Status.InfrastructureReady {
+		if _, ok := m.Labels[clusterv1.MachineEtcdReadyLabelName]; ok && m.Status.InfrastructureReady {
 			m.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
 		}
 	}

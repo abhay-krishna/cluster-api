@@ -40,10 +40,20 @@ no-proxy = []
 [settings.pki.registry-mirror-ca]
 data = "REGISTRYCA"
 trusted=true
+[[settings.container-registry.credentials]]
+registry = "public.ecr.aws"
+username = "admin"
+password = "pass"
+[[settings.container-registry.credentials]]
+registry = "REGISTRYENDPOINT"
+username = "admin"
+password = "pass"
 [settings.kubernetes.node-labels]
 KEY=VAR
 [settings.kubernetes.node-taints]
-KEY=VAR`
+KEY=VAR
+[settings.ntp]
+time-servers = ["1.2.3.4", "time-a.capi.com", "time-b.capi.com"]`
 
 const userDataNoAdminImage = `
 [settings.host-containers.admin]
@@ -99,6 +109,13 @@ func TestGenerateUserData(t *testing.T) {
 				NodeLabels:             "KEY=VAR",
 				Taints:                 "KEY=VAR",
 				ProviderId:             "PROVIDERID",
+				RegistryMirrorUsername: "admin",
+				RegistryMirrorPassword: "pass",
+				NTPServers: []string{
+					"\"1.2.3.4\"",
+					"\"time-a.capi.com\"",
+					"\"time-b.capi.com\"",
+				},
 				HostContainers: []bootstrapv1.BottlerocketHostContainer{
 					{
 						Name:         "admin",

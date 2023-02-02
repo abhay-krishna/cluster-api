@@ -33,6 +33,7 @@ type BottlerocketConfig struct {
 	Taints                                []corev1.Taint
 	BottlerocketCustomHostContainers      []bootstrapv1.BottlerocketHostContainer
 	BottlerocketCustomBootstrapContainers []bootstrapv1.BottlerocketBootstrapContainer
+	NTPServers                            []string
 	RegistryMirrorCredentials
 }
 
@@ -45,6 +46,7 @@ type BottlerocketSettingsInput struct {
 	RegistryMirrorUsername string
 	RegistryMirrorPassword string
 	NodeLabels             string
+	NTPServers             []string
 	Taints                 string
 	ProviderId             string
 	HostContainers         []bootstrapv1.BottlerocketHostContainer
@@ -57,8 +59,8 @@ type HostPath struct {
 }
 
 type RegistryMirrorCredentials struct {
-	Username	string
-	Password	string
+	Username string
+	Password string
 }
 
 func generateBootstrapContainerUserData(kind string, tpl string, data interface{}) ([]byte, error) {
@@ -141,6 +143,9 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(taintsTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse taints %s template", kind)
 	}
+	if _, err := tm.Parse(ntpTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse NTP %s template", kind)
+	}
 	t, err := tm.Parse(tpl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s template", kind)
@@ -214,10 +219,14 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 	if config.RegistryMirrorConfiguration.CACert != "" {
 		bottlerocketInput.RegistryMirrorCACert = base64.StdEncoding.EncodeToString([]byte(config.RegistryMirrorConfiguration.CACert))
 	}
-
 	if config.RegistryMirrorCredentials.Username != "" && config.RegistryMirrorCredentials.Password != "" {
 		bottlerocketInput.RegistryMirrorUsername = config.RegistryMirrorCredentials.Username
 		bottlerocketInput.RegistryMirrorPassword = config.RegistryMirrorCredentials.Password
+	}
+	if len(config.NTPServers) > 0 {
+		for _, ntp := range config.NTPServers {
+			bottlerocketInput.NTPServers = append(bottlerocketInput.NTPServers, strconv.Quote(ntp))
+		}
 	}
 
 	bottlerocketNodeUserData, err := generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)

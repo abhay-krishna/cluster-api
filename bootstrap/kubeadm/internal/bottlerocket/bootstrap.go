@@ -98,6 +98,12 @@ password = "{{.RegistryMirrorPassword}}"
 {{- end -}}
 `
 
+	ntpTemplate = `{{ define "ntpSettings" -}}
+[settings.ntp]
+time-servers = [{{stringsJoin .NTPServers ", " }}]
+{{- end -}}
+`
+
 	bottlerocketNodeInitSettingsTemplate = `{{template "hostContainerSlice" .}}
 
 {{template "kubernetesInitSettings" .}}
@@ -128,6 +134,10 @@ password = "{{.RegistryMirrorPassword}}"
 
 {{- if (ne .Taints "")}}
 {{template "taintsTemplate" .}}
+{{- end -}}
+
+{{- if .NTPServers}}
+{{template "ntpSettings" .}}
 {{- end -}}
 `
 )

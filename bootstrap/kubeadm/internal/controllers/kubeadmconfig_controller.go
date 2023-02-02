@@ -503,6 +503,9 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 		if len(scope.Config.Spec.InitConfiguration.NodeRegistration.Taints) > 0 {
 			bottlerocketConfig.Taints = scope.Config.Spec.InitConfiguration.NodeRegistration.Taints
 		}
+		if scope.Config.Spec.NTP != nil && scope.Config.Spec.NTP.Enabled != nil && *scope.Config.Spec.NTP.Enabled {
+			bottlerocketConfig.NTPServers = scope.Config.Spec.NTP.Servers
+		}
 
 	}
 
@@ -719,6 +722,9 @@ func (r *KubeadmConfigReconciler) joinWorker(ctx context.Context, scope *Scope) 
 		if len(scope.Config.Spec.JoinConfiguration.NodeRegistration.Taints) > 0 {
 			bottlerocketConfig.Taints = scope.Config.Spec.JoinConfiguration.NodeRegistration.Taints
 		}
+		if scope.Config.Spec.NTP != nil && scope.Config.Spec.NTP.Enabled != nil && *scope.Config.Spec.NTP.Enabled {
+			bottlerocketConfig.NTPServers = scope.Config.Spec.NTP.Servers
+		}
 		bootstrapJoinData, err = bottlerocket.NewNode(nodeInput, bottlerocketConfig)
 		if err != nil {
 			scope.Error(err, "Failed to create a worker bottlerocket join configuration")
@@ -855,6 +861,9 @@ func (r *KubeadmConfigReconciler) joinControlplane(ctx context.Context, scope *S
 		}
 		if len(scope.Config.Spec.JoinConfiguration.NodeRegistration.Taints) > 0 {
 			bottlerocketConfig.Taints = scope.Config.Spec.JoinConfiguration.NodeRegistration.Taints
+		}
+		if scope.Config.Spec.NTP != nil && scope.Config.Spec.NTP.Enabled != nil && *scope.Config.Spec.NTP.Enabled {
+			bottlerocketConfig.NTPServers = scope.Config.Spec.NTP.Servers
 		}
 		bootstrapJoinData, err = bottlerocket.NewJoinControlPlane(controlPlaneJoinInput, bottlerocketConfig)
 		if err != nil {

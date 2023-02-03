@@ -62,7 +62,22 @@ func (src *KubeadmConfig) ConvertTo(dstRaw conversion.Hub) error {
 		}
 		dst.Spec.JoinConfiguration.Patches = restored.Spec.JoinConfiguration.Patches
 		dst.Spec.JoinConfiguration.SkipPhases = restored.Spec.JoinConfiguration.SkipPhases
+		if &restored.Spec.JoinConfiguration.RegistryMirror != nil {
+			if restored.Spec.JoinConfiguration.RegistryMirror.Username != "" && restored.Spec.JoinConfiguration.RegistryMirror.Password != ""{
+				dst.Spec.JoinConfiguration.RegistryMirror.Username = restored.Spec.JoinConfiguration.RegistryMirror.Username
+				dst.Spec.JoinConfiguration.RegistryMirror.Password = restored.Spec.JoinConfiguration.RegistryMirror.Password
+			}
+		}
 	}
+	if restored.Spec.ClusterConfiguration != nil {
+		if &restored.Spec.ClusterConfiguration.RegistryMirror != nil {
+			if restored.Spec.ClusterConfiguration.RegistryMirror.Username != "" && restored.Spec.ClusterConfiguration.RegistryMirror.Password != ""{
+				dst.Spec.ClusterConfiguration.RegistryMirror.Username = restored.Spec.ClusterConfiguration.RegistryMirror.Username
+				dst.Spec.ClusterConfiguration.RegistryMirror.Password = restored.Spec.ClusterConfiguration.RegistryMirror.Password
+			}
+		}
+	}
+	
 	
 	return nil
 }
@@ -127,6 +142,21 @@ func (src *KubeadmConfigTemplate) ConvertTo(dstRaw conversion.Hub) error {
 		}
 		dst.Spec.Template.Spec.JoinConfiguration.Patches = restored.Spec.Template.Spec.JoinConfiguration.Patches
 		dst.Spec.Template.Spec.JoinConfiguration.SkipPhases = restored.Spec.Template.Spec.JoinConfiguration.SkipPhases
+		
+		if &restored.Spec.Template.Spec.JoinConfiguration.RegistryMirror != nil {
+			if restored.Spec.Template.Spec.JoinConfiguration.RegistryMirror.Username != "" && restored.Spec.Template.Spec.JoinConfiguration.RegistryMirror.Password != "" {
+				dst.Spec.Template.Spec.JoinConfiguration.RegistryMirror.Username = restored.Spec.Template.Spec.JoinConfiguration.RegistryMirror.Username
+				dst.Spec.Template.Spec.JoinConfiguration.RegistryMirror.Password = restored.Spec.Template.Spec.JoinConfiguration.RegistryMirror.Password
+			}
+		}
+	}
+	if restored.Spec.Template.Spec.ClusterConfiguration != nil {
+		if &restored.Spec.Template.Spec.ClusterConfiguration.RegistryMirror != nil {
+			if restored.Spec.Template.Spec.ClusterConfiguration.RegistryMirror.Username != "" && restored.Spec.Template.Spec.ClusterConfiguration.RegistryMirror.Password != "" {
+				dst.Spec.Template.Spec.ClusterConfiguration.RegistryMirror.Username = restored.Spec.Template.Spec.ClusterConfiguration.RegistryMirror.Username
+				dst.Spec.Template.Spec.ClusterConfiguration.RegistryMirror.Password = restored.Spec.Template.Spec.ClusterConfiguration.RegistryMirror.Password
+			}
+		}
 	}
 
 	return nil
@@ -185,3 +215,7 @@ func Convert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(in *b
 	return autoConvert_v1beta1_ClusterConfiguration_To_v1alpha4_ClusterConfiguration(in, out, s)
 }
 
+func Convert_v1beta1_RegistryMirrorConfiguration_To_v1alpha4_RegistryMirrorConfiguration(in *bootstrapv1.RegistryMirrorConfiguration, out *RegistryMirrorConfiguration, s apiconversion.Scope) error {
+	// RegistryMirror.Username and RegistryMirror.Password does not exist in v1alpha4
+	return autoConvert_v1beta1_RegistryMirrorConfiguration_To_v1alpha4_RegistryMirrorConfiguration(in, out, s)
+}

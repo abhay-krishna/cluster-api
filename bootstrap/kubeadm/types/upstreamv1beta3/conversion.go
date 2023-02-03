@@ -88,3 +88,8 @@ func Convert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(src 
 	// JoinConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.JoinControlPlane but not in upstreamv1beta3
 	return autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(src, dst, s)
 }
+
+func Convert_v1beta1_RegistryMirrorConfiguration_To_upstreamv1beta3_RegistryMirrorConfiguration(in *bootstrapv1.RegistryMirrorConfiguration, out *RegistryMirrorConfiguration, s apimachineryconversion.Scope) error {
+	// RegistryMirror.Username and RegistryMirror.Password does not exist in upstreamv1beta3
+	return autoConvert_v1beta1_RegistryMirrorConfiguration_To_upstreamv1beta3_RegistryMirrorConfiguration(in, out, s)
+}

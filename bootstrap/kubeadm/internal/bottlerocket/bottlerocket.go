@@ -33,7 +33,6 @@ type BottlerocketConfig struct {
 	Taints                                []corev1.Taint
 	BottlerocketCustomHostContainers      []bootstrapv1.BottlerocketHostContainer
 	BottlerocketCustomBootstrapContainers []bootstrapv1.BottlerocketBootstrapContainer
-	RegistryMirrorCredentials
 }
 
 type BottlerocketSettingsInput struct {
@@ -54,11 +53,6 @@ type BottlerocketSettingsInput struct {
 type HostPath struct {
 	Path string
 	Type string
-}
-
-type RegistryMirrorCredentials struct {
-	Username	string
-	Password	string
 }
 
 func generateBootstrapContainerUserData(kind string, tpl string, data interface{}) ([]byte, error) {
@@ -215,11 +209,6 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 	}
 	if config.RegistryMirrorConfiguration.CACert != "" {
 		bottlerocketInput.RegistryMirrorCACert = base64.StdEncoding.EncodeToString([]byte(config.RegistryMirrorConfiguration.CACert))
-	}
-
-	if config.RegistryMirrorCredentials.Username != "" && config.RegistryMirrorCredentials.Password != "" {
-		bottlerocketInput.RegistryMirrorUsername = config.RegistryMirrorCredentials.Username
-		bottlerocketInput.RegistryMirrorPassword = config.RegistryMirrorCredentials.Password
 	}
 
 	bottlerocketNodeUserData, err := generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)

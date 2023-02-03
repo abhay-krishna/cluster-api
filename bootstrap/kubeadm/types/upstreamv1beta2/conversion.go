@@ -97,3 +97,8 @@ func Convert_v1beta1_ClusterConfiguration_To_upstreamv1beta2_ClusterConfiguratio
 	// ClusterConfiguration.BottlerocketCustomHostContainers exists in bootstrapv1.ClusterConfiguration but not in upstreamv1beta2
 	return autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta2_ClusterConfiguration(src, dst, s)
 }
+
+func Convert_v1beta1_RegistryMirrorConfiguration_To_upstreamv1beta2_RegistryMirrorConfiguration(in *bootstrapv1.RegistryMirrorConfiguration, out *RegistryMirrorConfiguration, s apimachineryconversion.Scope) error {
+	// RegistryMirror.Username and RegistryMirror.Password does not exist in upstreamv1beta2
+	return autoConvert_v1beta1_RegistryMirrorConfiguration_To_upstreamv1beta2_RegistryMirrorConfiguration(in, out, s)
+}

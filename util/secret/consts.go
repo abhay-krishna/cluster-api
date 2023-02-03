@@ -48,9 +48,6 @@ const (
 	APIServerEtcdClient Purpose = "apiserver-etcd-client"
 
 	ManagedExternalEtcdCA Purpose = "managed-etcd"
-	
-	// RegistryCredentials is the secret name of secret containing registryMirror credentials
-	RegistryCredentials = "registry-credentials"
 )
 
 var (

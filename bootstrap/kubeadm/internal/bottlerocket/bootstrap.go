@@ -55,11 +55,13 @@ user-data = "{{.UserData}}"
 {{- end -}}
 {{- end -}}
 `
-
 	networkInitTemplate = `{{ define "networkInitSettings" -}}
 [settings.network]
+hostname = "{{.Hostname}}"
+{{- if (ne .HTTPSProxyEndpoint "")}}
 https-proxy = "{{.HTTPSProxyEndpoint}}"
 no-proxy = [{{stringsJoin .NoProxyEndpoints "," }}]
+{{- end -}}
 {{- end -}}
 `
 	registryMirrorTemplate = `{{ define "registryMirrorSettings" -}}
@@ -108,13 +110,12 @@ time-servers = [{{stringsJoin .NTPServers ", " }}]
 
 {{template "kubernetesInitSettings" .}}
 
+{{template "networkInitSettings" .}}
+
 {{- if .BootstrapContainers}}
 {{template "bootstrapContainerSlice" .}}
 {{- end -}}
 
-{{- if (ne .HTTPSProxyEndpoint "")}}
-{{template "networkInitSettings" .}}
-{{- end -}}
 
 {{- if (ne .RegistryMirrorEndpoint "")}}
 {{template "registryMirrorSettings" .}}

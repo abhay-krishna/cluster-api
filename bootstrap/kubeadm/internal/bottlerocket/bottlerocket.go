@@ -34,6 +34,7 @@ type BottlerocketConfig struct {
 	BottlerocketCustomHostContainers      []bootstrapv1.BottlerocketHostContainer
 	BottlerocketCustomBootstrapContainers []bootstrapv1.BottlerocketBootstrapContainer
 	NTPServers                            []string
+	Hostname                              string
 	RegistryMirrorCredentials
 }
 
@@ -49,6 +50,7 @@ type BottlerocketSettingsInput struct {
 	NTPServers             []string
 	Taints                 string
 	ProviderId             string
+	Hostname               string
 	HostContainers         []bootstrapv1.BottlerocketHostContainer
 	BootstrapContainers    []bootstrapv1.BottlerocketBootstrapContainer
 }
@@ -207,6 +209,7 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		NodeLabels:             parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
 		Taints:                 parseTaints(config.Taints),                              // empty string if it does not exist
 		ProviderId:             config.KubeletExtraArgs["provider-id"],
+		Hostname:               config.Hostname,
 		HostContainers:         hostContainers,
 		BootstrapContainers:    config.BottlerocketCustomBootstrapContainers,
 	}

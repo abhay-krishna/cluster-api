@@ -194,6 +194,33 @@ spec:
                           may reject unrecognized values.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                         type: string
+                      bottlerocket:
+                        description: |-
+                          Bottlerocket holds configuration for certain bottlerocket settings.
+                          This is only for bottlerocket.
+                        properties:
+                          kubernetes:
+                            description: Kubernetes holds the kubernetes settings
+                              for bottlerocket nodes.
+                            properties:
+                              allowedUnsafeSysctls:
+                                description: AllowedUnsafeSysctls defines the list
+                                  of unsafe sysctls that can be set on a node.
+                                items:
+                                  type: string
+                                type: array
+                              clusterDNSIPs:
+                                description: ClusterDNSIPs defines IP addresses of
+                                  the DNS servers.
+                                items:
+                                  type: string
+                                type: array
+                              maxPods:
+                                description: MaxPods defines the maximum number of
+                                  pods that can run on a node.
+                                type: integer
+                            type: object
+                        type: object
                       bottlerocketAdmin:
                         description: |-
                           BottlerocketAdmin holds the image source for admin container
@@ -938,6 +965,33 @@ spec:
                           may reject unrecognized values.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                         type: string
+                      bottlerocket:
+                        description: |-
+                          Bottlerocket holds configuration for certain bottlerocket settings.
+                          This is only for bottlerocket.
+                        properties:
+                          kubernetes:
+                            description: Kubernetes holds the kubernetes settings
+                              for bottlerocket nodes.
+                            properties:
+                              allowedUnsafeSysctls:
+                                description: AllowedUnsafeSysctls defines the list
+                                  of unsafe sysctls that can be set on a node.
+                                items:
+                                  type: string
+                                type: array
+                              clusterDNSIPs:
+                                description: ClusterDNSIPs defines IP addresses of
+                                  the DNS servers.
+                                items:
+                                  type: string
+                                type: array
+                              maxPods:
+                                description: MaxPods defines the maximum number of
+                                  pods that can run on a node.
+                                type: integer
+                            type: object
+                        type: object
                       bottlerocketAdmin:
                         description: |-
                           BottlerocketAdmin holds the image source for admin container
@@ -1695,6 +1749,33 @@ spec:
                           may reject unrecognized values.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                         type: string
+                      bottlerocket:
+                        description: |-
+                          Bottlerocket holds configuration for certain bottlerocket settings.
+                          This is only for bottlerocket.
+                        properties:
+                          kubernetes:
+                            description: Kubernetes holds the kubernetes settings
+                              for bottlerocket nodes.
+                            properties:
+                              allowedUnsafeSysctls:
+                                description: AllowedUnsafeSysctls defines the list
+                                  of unsafe sysctls that can be set on a node.
+                                items:
+                                  type: string
+                                type: array
+                              clusterDNSIPs:
+                                description: ClusterDNSIPs defines IP addresses of
+                                  the DNS servers.
+                                items:
+                                  type: string
+                                type: array
+                              maxPods:
+                                description: MaxPods defines the maximum number of
+                                  pods that can run on a node.
+                                type: integer
+                            type: object
+                        type: object
                       bottlerocketAdmin:
                         description: |-
                           BottlerocketAdmin holds the image source for admin container
@@ -2436,6 +2517,33 @@ spec:
                           may reject unrecognized values.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                         type: string
+                      bottlerocket:
+                        description: |-
+                          Bottlerocket holds configuration for certain bottlerocket settings.
+                          This is only for bottlerocket.
+                        properties:
+                          kubernetes:
+                            description: Kubernetes holds the kubernetes settings
+                              for bottlerocket nodes.
+                            properties:
+                              allowedUnsafeSysctls:
+                                description: AllowedUnsafeSysctls defines the list
+                                  of unsafe sysctls that can be set on a node.
+                                items:
+                                  type: string
+                                type: array
+                              clusterDNSIPs:
+                                description: ClusterDNSIPs defines IP addresses of
+                                  the DNS servers.
+                                items:
+                                  type: string
+                                type: array
+                              maxPods:
+                                description: MaxPods defines the maximum number of
+                                  pods that can run on a node.
+                                type: integer
+                            type: object
+                        type: object
                       bottlerocketAdmin:
                         description: |-
                           BottlerocketAdmin holds the image source for admin container
@@ -3412,6 +3520,33 @@ spec:
                           may reject unrecognized values.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                         type: string
+                      bottlerocket:
+                        description: |-
+                          Bottlerocket holds configuration for certain bottlerocket settings.
+                          This is only for bottlerocket.
+                        properties:
+                          kubernetes:
+                            description: Kubernetes holds the kubernetes settings
+                              for bottlerocket nodes.
+                            properties:
+                              allowedUnsafeSysctls:
+                                description: AllowedUnsafeSysctls defines the list
+                                  of unsafe sysctls that can be set on a node.
+                                items:
+                                  type: string
+                                type: array
+                              clusterDNSIPs:
+                                description: ClusterDNSIPs defines IP addresses of
+                                  the DNS servers.
+                                items:
+                                  type: string
+                                type: array
+                              maxPods:
+                                description: MaxPods defines the maximum number of
+                                  pods that can run on a node.
+                                type: integer
+                            type: object
+                        type: object
                       bottlerocketAdmin:
                         description: |-
                           BottlerocketAdmin holds the image source for admin container
@@ -4649,6 +4784,33 @@ spec:
                           may reject unrecognized values.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
                         type: string
+                      bottlerocket:
+                        description: |-
+                          Bottlerocket holds configuration for certain bottlerocket settings.
+                          This is only for bottlerocket.
+                        properties:
+                          kubernetes:
+                            description: Kubernetes holds the kubernetes settings
+                              for bottlerocket nodes.
+                            properties:
+                              allowedUnsafeSysctls:
+                                description: AllowedUnsafeSysctls defines the list
+                                  of unsafe sysctls that can be set on a node.
+                                items:
+                                  type: string
+                                type: array
+                              clusterDNSIPs:
+                                description: ClusterDNSIPs defines IP addresses of
+                                  the DNS servers.
+                                items:
+                                  type: string
+                                type: array
+                              maxPods:
+                                description: MaxPods defines the maximum number of
+                                  pods that can run on a node.
+                                type: integer
+                            type: object
+                        type: object
                       bottlerocketAdmin:
                         description: |-
                           BottlerocketAdmin holds the image source for admin container

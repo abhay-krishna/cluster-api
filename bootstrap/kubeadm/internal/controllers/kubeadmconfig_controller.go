@@ -558,6 +558,7 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 			BottlerocketControl:                   scope.Config.Spec.ClusterConfiguration.BottlerocketControl,
 			BottlerocketCustomHostContainers:      scope.Config.Spec.ClusterConfiguration.BottlerocketHostContainers,
 			BottlerocketCustomBootstrapContainers: scope.Config.Spec.ClusterConfiguration.BottlerocketCustomBootstrapContainers,
+			BottlerocketSettings:                  scope.Config.Spec.ClusterConfiguration.Bottlerocket,
 			Hostname:                              machine.Name,
 		}
 		if scope.Config.Spec.ClusterConfiguration.Proxy.HTTPSProxy != "" {
@@ -582,7 +583,6 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 		if scope.Config.Spec.NTP != nil && scope.Config.Spec.NTP.Enabled != nil && *scope.Config.Spec.NTP.Enabled {
 			bottlerocketConfig.NTPServers = scope.Config.Spec.NTP.Servers
 		}
-
 	}
 
 	clusterdata, err := kubeadmtypes.MarshalClusterConfigurationForVersion(scope.Config.Spec.ClusterConfiguration, parsedVersion)
@@ -871,6 +871,7 @@ func (r *KubeadmConfigReconciler) joinWorker(ctx context.Context, scope *Scope) 
 			BottlerocketControl:                   scope.Config.Spec.JoinConfiguration.BottlerocketControl,
 			BottlerocketCustomHostContainers:      scope.Config.Spec.JoinConfiguration.BottlerocketCustomHostContainers,
 			BottlerocketCustomBootstrapContainers: scope.Config.Spec.JoinConfiguration.BottlerocketCustomBootstrapContainers,
+			BottlerocketSettings:                  scope.Config.Spec.JoinConfiguration.Bottlerocket,
 			Hostname:                              machine.Name,
 		}
 		if scope.Config.Spec.JoinConfiguration.Proxy.HTTPSProxy != "" {
@@ -1066,6 +1067,7 @@ func (r *KubeadmConfigReconciler) joinControlplane(ctx context.Context, scope *S
 			BottlerocketControl:                   scope.Config.Spec.JoinConfiguration.BottlerocketControl,
 			BottlerocketCustomHostContainers:      scope.Config.Spec.JoinConfiguration.BottlerocketCustomHostContainers,
 			BottlerocketCustomBootstrapContainers: scope.Config.Spec.JoinConfiguration.BottlerocketCustomBootstrapContainers,
+			BottlerocketSettings:                  scope.Config.Spec.JoinConfiguration.Bottlerocket,
 			Hostname:                              machine.Name,
 		}
 		if scope.Config.Spec.JoinConfiguration.Proxy.HTTPSProxy != "" {

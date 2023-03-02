@@ -185,6 +185,31 @@ type ClusterConfiguration struct {
 	// This is only for bottlerocket.
 	// +optional
 	BottlerocketCustomBootstrapContainers []BottlerocketBootstrapContainer `json:"bottlerocketCustomBootstrapContainers,omitempty"`
+
+	// Bottlerocket holds configuration for certain bottlerocket settings.
+	// This is only for bottlerocket.
+	// +optional
+	Bottlerocket *BottlerocketSettings `json:"bottlerocket,omitempty"`
+}
+
+// BottlerocketSettings define bottlerocket settings that can be configured on bottlerocket nodes.
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketSettings struct {
+	// Kubernetes holds the kubernetes settings for bottlerocket nodes.
+	Kubernetes *BottlerocketKubernetesSettings `json:"kubernetes,omitempty"`
+}
+
+// BottlerocketKubernetesSettings holds the settings for kubernetes on bottlerocket nodes.
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketKubernetesSettings struct {
+	// MaxPods defines the maximum number of pods that can run on a node.
+	MaxPods int `json:"maxPods,omitempty"`
+
+	// AllowedUnsafeSysctls defines the list of unsafe sysctls that can be set on a node.
+	AllowedUnsafeSysctls []string `json:"allowedUnsafeSysctls,omitempty"`
+
+	// ClusterDNSIPs defines IP addresses of the DNS servers.
+	ClusterDNSIPs []string `json:"clusterDNSIPs,omitempty"`
 }
 
 // Pause defines the pause image repo and tag that should be run on the bootstrapped nodes.
@@ -573,6 +598,11 @@ type JoinConfiguration struct {
 	// This is only for bottlerocket.
 	// +optional
 	BottlerocketCustomBootstrapContainers []BottlerocketBootstrapContainer `json:"bottlerocketCustomBootstrapContainers,omitempty"`
+
+	// Bottlerocket holds configuration for certain bottlerocket settings.
+	// This is only for bottlerocket.
+	// +optional
+	Bottlerocket *BottlerocketSettings `json:"bottlerocket,omitempty"`
 }
 
 // BottlerocketHostContainer describes a host image for Bottlerocket

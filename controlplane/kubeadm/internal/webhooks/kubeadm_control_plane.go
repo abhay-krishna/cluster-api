@@ -168,6 +168,7 @@ func (webhook *KubeadmControlPlane) ValidateUpdate(_ context.Context, oldObj, ne
 		{spec, kubeadmConfigSpec, clusterConfiguration, "bottlerocketAdmin", "*"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "bottlerocketControl", "*"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "bottlerocketCustomBootstrapContainers"},
+		{spec, kubeadmConfigSpec, clusterConfiguration, "bottlerocketSettings", "*"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "pause", "*"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "imageRepository"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, "etcd", "local", "imageTag"},
@@ -215,6 +216,7 @@ func (webhook *KubeadmControlPlane) ValidateUpdate(_ context.Context, oldObj, ne
 		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketAdmin", "*"},
 		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketControl", "*"},
 		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketCustomBootstrapContainers"},
+		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketSettings", "*"},
 		{spec, kubeadmConfigSpec, joinConfiguration, "pause", "*"},
 		// spec.kubeadmConfigSpec
 		{spec, kubeadmConfigSpec, preKubeadmCommands},

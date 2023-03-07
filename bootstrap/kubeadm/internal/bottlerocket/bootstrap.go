@@ -115,6 +115,12 @@ time-servers = [{{stringsJoin .NTPServers ", " }}]
 {{- end -}}
 `
 
+	sysctlSettingsTemplate = `{{ define "sysctlSettingsTemplate" -}}
+[settings.kernel.sysctl]
+{{.SysctlSettings}}
+{{- end -}}
+`
+
 	bottlerocketNodeInitSettingsTemplate = `{{template "hostContainerSlice" .}}
 
 {{template "kubernetesInitSettings" .}}
@@ -148,6 +154,10 @@ time-servers = [{{stringsJoin .NTPServers ", " }}]
 
 {{- if .NTPServers}}
 {{template "ntpSettings" .}}
+{{- end -}}
+
+{{- if (ne .SysctlSettings "")}}
+{{template "sysctlSettingsTemplate" .}}
 {{- end -}}
 `
 )

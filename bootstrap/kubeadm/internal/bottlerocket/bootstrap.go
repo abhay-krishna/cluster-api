@@ -10,8 +10,17 @@ standalone-mode = true
 authentication-mode = "tls"
 server-tls-bootstrap = false
 pod-infra-container-image = "{{.PauseContainerSource}}"
-{{- if (ne .ProviderId "")}}
-provider-id = "{{.ProviderId}}"
+{{- if (ne .ProviderID "")}}
+provider-id = "{{.ProviderID}}"
+{{- end -}}
+{{- if .AllowedUnsafeSysctls }}
+allowed-unsafe-sysctls = [{{stringsJoin .AllowedUnsafeSysctls ", " }}]
+{{- end -}}
+{{- if .ClusterDNSIPs }}
+cluster-dns-ip = [{{stringsJoin .ClusterDNSIPs ", " }}]
+{{- end -}}
+{{- if .MaxPods }}
+max-pods = {{.MaxPods}}
 {{- end -}}
 {{- end -}}
 `
@@ -20,8 +29,8 @@ provider-id = "{{.ProviderId}}"
 [settings.host-containers.{{.Name}}]
 enabled = true
 superpowered = {{.Superpowered}}
-{{- if (ne (imageUrl .ImageMeta) "")}}
-source = "{{imageUrl .ImageMeta}}"
+{{- if (ne (imageURL .ImageMeta) "")}}
+source = "{{imageURL .ImageMeta}}"
 {{- end -}}
 {{- if (ne .UserData "")}}
 user-data = "{{.UserData}}"
@@ -40,8 +49,8 @@ user-data = "{{.UserData}}"
 [settings.bootstrap-containers.{{.Name}}]
 essential = {{.Essential}}
 mode = "{{.Mode}}"
-{{- if (ne (imageUrl .ImageMeta) "")}}
-source = "{{imageUrl .ImageMeta}}"
+{{- if (ne (imageURL .ImageMeta) "")}}
+source = "{{imageURL .ImageMeta}}"
 {{- end -}}
 {{- if (ne .UserData "")}}
 user-data = "{{.UserData}}"

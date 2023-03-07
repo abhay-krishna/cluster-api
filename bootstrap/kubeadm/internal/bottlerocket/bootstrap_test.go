@@ -253,6 +253,33 @@ essential = false
 mode = "MODE"
 source = "BOOTSTRAP_REPO:BOOTSTRAP_TAG"
 user-data = "BOOTSTRAP_B6_4USERDATA"`
+
+	kernelSettingsUserData = `
+[settings.host-containers.admin]
+enabled = true
+superpowered = true
+source = "ADMIN_REPO:ADMIN_TAG"
+user-data = "CnsKCSJzc2giOiB7CgkJImF1dGhvcml6ZWQta2V5cyI6IFsic3NoLXJzYSBBQUEuLi4iXQoJfQp9"
+[settings.host-containers.kubeadm-bootstrap]
+enabled = true
+superpowered = true
+source = "BOOTSTRAP_REPO:BOOTSTRAP_TAG"
+user-data = "Qk9UVExFUk9DS0VUX0JPT1RTVFJBUF9VU0VSREFUQQ=="
+
+[settings.kubernetes]
+cluster-domain = "cluster.local"
+standalone-mode = true
+authentication-mode = "tls"
+server-tls-bootstrap = false
+pod-infra-container-image = "PAUSE_REPO:PAUSE_TAG"
+provider-id = "PROVIDERID"
+
+[settings.network]
+hostname = "hostname"
+[settings.kernel.sysctl]
+"foo" = "bar"
+"abc" = "def"
+`
 )
 
 var (
@@ -464,6 +491,27 @@ func TestGetBottlerocketNodeUserData(t *testing.T) {
 				Hostname:                              hostname,
 			},
 			output: customBootstrapUserData,
+		},
+		{
+			name: "with kernel settings",
+			config: &BottlerocketConfig{
+				BottlerocketAdmin:     brAdmin,
+				BottlerocketBootstrap: brBootstrap,
+				Hostname:              hostname,
+				Pause:                 pause,
+				KubeletExtraArgs: map[string]string{
+					"provider-id": "PROVIDERID",
+				},
+				BottlerocketSettings: &bootstrapv1.BottlerocketSettings{
+					Kernel: &bootstrapv1.BottlerocketKernelSettings{
+						SysctlSettings: map[string]string{
+							"foo": "bar",
+							"abc": "def",
+						},
+					},
+				},
+			},
+			output: kernelSettingsUserData,
 		},
 	}
 	for _, testcase := range testcases {

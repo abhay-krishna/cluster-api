@@ -418,6 +418,7 @@ func autoConvert_upstreamv1beta4_ClusterConfiguration_To_v1beta1_ClusterConfigur
 func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta4_ClusterConfiguration(in *v1beta1.ClusterConfiguration, out *ClusterConfiguration, s conversion.Scope) error {
 	// WARNING: in.Pause requires manual conversion: does not exist in peer-type
 	// WARNING: in.BottlerocketBootstrap requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketAdmin requires manual conversion: does not exist in peer-type
 	// WARNING: in.BottlerocketControl requires manual conversion: does not exist in peer-type
 	// WARNING: in.RegistryMirror requires manual conversion: does not exist in peer-type
 	if err := Convert_v1beta1_Etcd_To_upstreamv1beta4_Etcd(&in.Etcd, &out.Etcd, s); err != nil {
@@ -445,6 +446,8 @@ func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta4_ClusterConfigur
 	out.FeatureGates = *(*map[string]bool)(unsafe.Pointer(&in.FeatureGates))
 	out.ClusterName = in.ClusterName
 	// WARNING: in.BottlerocketHostContainers requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
+	// WARNING: in.Bottlerocket requires manual conversion: does not exist in peer-type
 	return nil
 }
 
@@ -734,6 +737,7 @@ func autoConvert_upstreamv1beta4_JoinConfiguration_To_v1beta1_JoinConfiguration(
 func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta4_JoinConfiguration(in *v1beta1.JoinConfiguration, out *JoinConfiguration, s conversion.Scope) error {
 	// WARNING: in.Pause requires manual conversion: does not exist in peer-type
 	// WARNING: in.BottlerocketBootstrap requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketAdmin requires manual conversion: does not exist in peer-type
 	// WARNING: in.BottlerocketControl requires manual conversion: does not exist in peer-type
 	// WARNING: in.Proxy requires manual conversion: does not exist in peer-type
 	// WARNING: in.RegistryMirror requires manual conversion: does not exist in peer-type
@@ -756,6 +760,8 @@ func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta4_JoinConfiguration(
 	out.SkipPhases = *(*[]string)(unsafe.Pointer(&in.SkipPhases))
 	out.Patches = (*Patches)(unsafe.Pointer(in.Patches))
 	// WARNING: in.BottlerocketCustomHostContainers requires manual conversion: does not exist in peer-type
+	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
+	// WARNING: in.Bottlerocket requires manual conversion: does not exist in peer-type
 	return nil
 }
 

@@ -55,10 +55,11 @@ type BottlerocketSettingsInput struct {
 	ProviderID             string
 	Hostname               string
 	AllowedUnsafeSysctls   []string
-	ClusterDNSIPs           []string
+	ClusterDNSIPs          []string
 	MaxPods                int
 	HostContainers         []bootstrapv1.BottlerocketHostContainer
 	BootstrapContainers    []bootstrapv1.BottlerocketBootstrapContainer
+	SysctlSettings         string
 }
 
 // HostPath holds the path and type of a host path volume.
@@ -156,6 +157,9 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(ntpTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse NTP %s template", kind)
 	}
+	if _, err := tm.Parse(sysctlSettingsTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse sysctl settings %s template", kind)
+	}
 	t, err := tm.Parse(tpl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s template", kind)
@@ -239,14 +243,20 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 			bottlerocketInput.NTPServers = append(bottlerocketInput.NTPServers, strconv.Quote(ntp))
 		}
 	}
-	if config.BottlerocketSettings != nil && config.BottlerocketSettings.Kubernetes != nil {
-		bottlerocketInput.MaxPods = config.BottlerocketSettings.Kubernetes.MaxPods
-		for _, sysctl := range config.BottlerocketSettings.Kubernetes.AllowedUnsafeSysctls {
-			bottlerocketInput.AllowedUnsafeSysctls = append(bottlerocketInput.AllowedUnsafeSysctls, strconv.Quote(sysctl))
+	if config.BottlerocketSettings != nil {
+		if config.BottlerocketSettings.Kubernetes != nil {
+			bottlerocketInput.MaxPods = config.BottlerocketSettings.Kubernetes.MaxPods
+			for _, sysctl := range config.BottlerocketSettings.Kubernetes.AllowedUnsafeSysctls {
+				bottlerocketInput.AllowedUnsafeSysctls = append(bottlerocketInput.AllowedUnsafeSysctls, strconv.Quote(sysctl))
+			}
+			for _, ip := range config.BottlerocketSettings.Kubernetes.ClusterDNSIPs {
+				bottlerocketInput.ClusterDNSIPs = append(bottlerocketInput.ClusterDNSIPs, strconv.Quote(ip))
+			}
 		}
-		for _, ip := range config.BottlerocketSettings.Kubernetes.ClusterDNSIPs {
-			bottlerocketInput.ClusterDNSIPs = append(bottlerocketInput.ClusterDNSIPs, strconv.Quote(ip))
+		if config.BottlerocketSettings.Kernel != nil {
+			bottlerocketInput.SysctlSettings = parseSysctlSettings(config.BottlerocketSettings.Kernel.SysctlSettings)
 		}
+
 	}
 
 	return generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)
@@ -295,6 +305,14 @@ func parseNodeLabels(nodeLabels string) string {
 		}
 	}
 	return nodeLabelsToml
+}
+
+func parseSysctlSettings(sysctlSettings map[string]string) string {
+	sysctlSettingsToml := ""
+	for key, value := range sysctlSettings {
+		sysctlSettingsToml += fmt.Sprintf("\"%v\" = \"%v\"\n", key, value)
+	}
+	return sysctlSettingsToml
 }
 
 // Parses through all the users and return list of all user's authorized ssh keys

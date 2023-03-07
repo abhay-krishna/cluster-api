@@ -931,12 +931,6 @@ func schema_sigsk8sio_cluster_api_api_v1beta1_ClusterSpec(ref common.ReferenceCa
 							Ref:         ref("k8s.io/api/core/v1.ObjectReference"),
 						},
 					},
-					"managedExternalEtcdRef": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ManagedExternalEtcdRef is an optional reference to an etcd provider resource that holds details for provisioning an external etcd cluster",
-							Ref:         ref("k8s.io/api/core/v1.ObjectReference"),
-						},
-					},
 					"infrastructureRef": {
 						SchemaProps: spec.SchemaProps{
 							Description: "infrastructureRef is a reference to a provider-specific resource that holds the details for provisioning infrastructure for a cluster in said provider.",

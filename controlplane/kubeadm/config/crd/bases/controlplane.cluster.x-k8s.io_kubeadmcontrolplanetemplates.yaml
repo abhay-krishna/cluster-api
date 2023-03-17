@@ -1451,6 +1451,18 @@ spec:
                                   certain bottlerocket settings. This is only for
                                   bottlerocket.
                                 properties:
+                                  kernel:
+                                    description: KernelSettings contains additional
+                                      kernel settings for Bottlerocket.
+                                    properties:
+                                      sysctlSettings:
+                                        additionalProperties:
+                                          type: string
+                                        description: SysctlSettings defines the kernel
+                                          sysctl settings to set for bottlerocket
+                                          nodes.
+                                        type: object
+                                    type: object
                                   kubernetes:
                                     description: Kubernetes holds the kubernetes settings
                                       for bottlerocket nodes.
@@ -2350,6 +2362,18 @@ spec:
                                   certain bottlerocket settings. This is only for
                                   bottlerocket.
                                 properties:
+                                  kernel:
+                                    description: KernelSettings contains additional
+                                      kernel settings for Bottlerocket.
+                                    properties:
+                                      sysctlSettings:
+                                        additionalProperties:
+                                          type: string
+                                        description: SysctlSettings defines the kernel
+                                          sysctl settings to set for bottlerocket
+                                          nodes.
+                                        type: object
+                                    type: object
                                   kubernetes:
                                     description: Kubernetes holds the kubernetes settings
                                       for bottlerocket nodes.

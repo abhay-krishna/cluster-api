@@ -19,8 +19,9 @@ package machine
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -378,7 +379,7 @@ func (r *Reconciler) reconcileInfrastructure(ctx context.Context, s *scope) (ctr
 							},
 						},
 						Data: map[string][]byte{
-							"address": []byte(machineIP),
+							"address":    []byte(machineIP),
 							"clientUrls": []byte(fmt.Sprintf("https://%v:2379", machineIP)),
 						},
 						Type: clusterv1.ClusterSecretType,

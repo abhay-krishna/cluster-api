@@ -121,6 +121,15 @@ time-servers = [{{stringsJoin .NTPServers ", " }}]
 {{- end -}}
 `
 
+	bootSettingsTemplate = `{{ define "bootSettings" -}}
+[settings.boot]
+reboot-to-reconcile = true
+
+[settings.boot.kernel-parameters]
+{{.BootKernel}}
+{{- end -}}
+`
+
 	bottlerocketNodeInitSettingsTemplate = `{{template "hostContainerSlice" .}}
 
 {{template "kubernetesInitSettings" .}}
@@ -158,6 +167,10 @@ time-servers = [{{stringsJoin .NTPServers ", " }}]
 
 {{- if (ne .SysctlSettings "")}}
 {{template "sysctlSettingsTemplate" .}}
+{{- end -}}
+
+{{- if .BootKernel}}
+{{template "bootSettings" .}}
 {{- end -}}
 `
 )

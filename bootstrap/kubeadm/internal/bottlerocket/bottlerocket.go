@@ -57,6 +57,7 @@ type BottlerocketSettingsInput struct {
 	AllowedUnsafeSysctls   []string
 	ClusterDNSIPs          []string
 	MaxPods                int
+	BootKernel             string
 	HostContainers         []bootstrapv1.BottlerocketHostContainer
 	BootstrapContainers    []bootstrapv1.BottlerocketBootstrapContainer
 	SysctlSettings         string
@@ -160,6 +161,9 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(sysctlSettingsTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse sysctl settings %s template", kind)
 	}
+	if _, err := tm.Parse(bootSettingsTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse boot settings %s template", kind)
+	}
 	t, err := tm.Parse(tpl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s template", kind)
@@ -257,6 +261,10 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 			bottlerocketInput.SysctlSettings = parseSysctlSettings(config.BottlerocketSettings.Kernel.SysctlSettings)
 		}
 
+		if config.BottlerocketSettings.Boot != nil {
+			bottlerocketInput.BootKernel = parseBootSettings(config.BottlerocketSettings.Boot.BootKernelParameters)
+		}
+
 	}
 
 	return generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)
@@ -313,6 +321,22 @@ func parseSysctlSettings(sysctlSettings map[string]string) string {
 		sysctlSettingsToml += fmt.Sprintf("\"%v\" = \"%v\"\n", key, value)
 	}
 	return sysctlSettingsToml
+}
+
+func parseBootSettings(bootSettings map[string][]string) string {
+	bootSettingsToml := ""
+	for key, value := range bootSettings {
+		var values []string
+		if len(value) != 0 {
+			for _, val := range value {
+				quotedVal := "\"" + val + "\""
+				values = append(values, quotedVal)
+			}
+		}
+		keyVal := strings.Join(values, ",")
+		bootSettingsToml += fmt.Sprintf("\"%v\" = [%v]\n", key, keyVal)
+	}
+	return bootSettingsToml
 }
 
 // Parses through all the users and return list of all user's authorized ssh keys

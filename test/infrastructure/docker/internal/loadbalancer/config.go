@@ -38,9 +38,10 @@ global
   log /dev/log local0
   log /dev/log local1 notice
   daemon
-  # limit memory usage to approximately 18 MB
-  # (see https://github.com/kubernetes-sigs/kind/pull/3115)
-  maxconn 100000
+  # EKS-A Change to 10k instead of 100k to avoid needing to raise default
+  # ulimits on al2 nodes and 10k seems like a reasonable default for
+  # our use cases
+  maxconn 10000
 
 resolvers docker
   nameserver dns 127.0.0.11:53

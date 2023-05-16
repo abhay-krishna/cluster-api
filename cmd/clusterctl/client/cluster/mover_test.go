@@ -658,7 +658,7 @@ func Test_objectMover_backupTargetObject(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			// Run backupTargetObject on nodes in graph
 			mover := objectMover{
@@ -747,7 +747,7 @@ func Test_objectMover_restoreTargetObject(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			// gets a fakeProxy to an empty cluster with all the required CRDs
 			toProxy := getFakeProxyWithCRDs()
@@ -853,7 +853,7 @@ func Test_objectMover_toDirectory(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			// Run toDirectory
 			mover := objectMover{
@@ -1070,7 +1070,7 @@ func Test_getMoveSequence(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			moveSequence := getMoveSequence(graph)
 			g.Expect(moveSequence.groups).To(HaveLen(len(tt.wantMoveGroups)))
@@ -1101,7 +1101,7 @@ func Test_objectMover_move_dryRun(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			// gets a fakeProxy to an empty cluster with all the required CRDs
 			toProxy := getFakeProxyWithCRDs()
@@ -1174,7 +1174,7 @@ func Test_objectMover_move(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			// gets a fakeProxy to an empty cluster with all the required CRDs
 			toProxy := getFakeProxyWithCRDs()
@@ -1445,7 +1445,7 @@ func Test_objectMover_checkProvisioningCompleted(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			o := &objectMover{
 				fromProxy: graph.proxy,
@@ -1685,7 +1685,7 @@ func Test_objectMoverService_ensureNamespaces(t *testing.T) {
 			g.Expect(getFakeDiscoveryTypes(graph)).To(Succeed())
 
 			// Trigger discovery the content of the source cluster
-			g.Expect(graph.Discovery("")).To(Succeed())
+			g.Expect(graph.Discovery("", "")).To(Succeed())
 
 			mover := objectMover{
 				fromProxy: graph.proxy,

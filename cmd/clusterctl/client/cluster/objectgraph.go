@@ -410,8 +410,8 @@ func getCRDList(proxy Proxy, crdList *apiextensionsv1.CustomResourceDefinitionLi
 }
 
 // Discovery reads all the Kubernetes objects existing in a namespace (or in all namespaces if empty) for the types received in input, and then adds
-// everything to the objects graph.
-func (o *objectGraph) Discovery(namespace string) error {
+// everything to the objects graph. Filters for objects only belonging to specific cluster if provided.
+func (o *objectGraph) Discovery(namespace, cluster string) error {
 	log := logf.Log
 	log.Info("Discovering Cluster API objects")
 
@@ -473,7 +473,29 @@ func (o *objectGraph) Discovery(namespace string) error {
 	// Completes the graph by setting for each node the list of tenants the node belongs to.
 	o.setTenants()
 
+	// Filter and remove nodes in the graph that do not belong to cluster
+	if cluster != "" {
+		o.filterCluster(cluster)
+	}
+
 	return nil
+}
+
+// filterCluster removes all objects but provided cluster and its dependents and soft-dependents
+func (o *objectGraph) filterCluster(cluster string) {
+	for _, node := range o.getNodes() {
+		for tenant, _ := range node.tenant {
+
+			// check if tenant is "Cluster" Kind and if the name matches with the provided cluster name
+			if tenant.identity.GroupVersionKind().GroupKind() == clusterv1.GroupVersion.WithKind("Cluster").GroupKind() &&
+				tenant.identity.Name != cluster {
+				if _, ok := o.uidToNode[node.identity.UID]; ok {
+					delete(o.uidToNode, node.identity.UID)
+				}
+				break
+			}
+		}
+	}
 }
 
 func getObjList(proxy Proxy, typeMeta metav1.TypeMeta, selectors []client.ListOption, objList *unstructured.UnstructuredList) error {

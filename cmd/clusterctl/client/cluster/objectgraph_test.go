@@ -1720,7 +1720,7 @@ func TestObjectGraph_Discovery(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 
 			// finally test discovery
-			err = graph.Discovery("")
+			err = graph.Discovery("", "")
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
@@ -1876,7 +1876,133 @@ func TestObjectGraph_DiscoveryByNamespace(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 
 			// finally test discovery
-			err = graph.Discovery(tt.args.namespace)
+			err = graph.Discovery(tt.args.namespace, "")
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).NotTo(HaveOccurred())
+			assertGraph(t, graph, tt.want)
+		})
+	}
+}
+
+func TestObjectGraph_DiscoveryByCluster(t *testing.T) {
+	type args struct {
+		cluster string
+		objs    []client.Object
+	}
+	var tests = []struct {
+		name    string
+		args    args
+		want    wantGraph
+		wantErr bool
+	}{
+		{
+			name: "two clusters, read both",
+			args: args{
+				cluster: "", // read all the namespaces
+				objs: func() []client.Object {
+					objs := []client.Object{}
+					objs = append(objs, test.NewFakeCluster("ns1", "cluster1").Objs()...)
+					objs = append(objs, test.NewFakeCluster("ns2", "cluster2").Objs()...)
+					return objs
+				}(),
+			},
+			want: wantGraph{
+				nodes: map[string]wantGraphItem{
+					"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1": {
+						forceMove:          true,
+						forceMoveHierarchy: true,
+					},
+					"infrastructure.cluster.x-k8s.io/v1beta1, Kind=GenericInfrastructureCluster, ns1/cluster1": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1",
+						},
+					},
+					"/v1, Kind=Secret, ns1/cluster1-ca": {
+						softOwners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1", // NB. this secret is not linked to the cluster through owner ref
+						},
+					},
+					"/v1, Kind=Secret, ns1/cluster1-kubeconfig": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1",
+						},
+					},
+					"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns2/cluster2": {
+						forceMove:          true,
+						forceMoveHierarchy: true,
+					},
+					"infrastructure.cluster.x-k8s.io/v1beta1, Kind=GenericInfrastructureCluster, ns2/cluster2": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns2/cluster2",
+						},
+					},
+					"/v1, Kind=Secret, ns2/cluster2-ca": {
+						softOwners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns2/cluster2", // NB. this secret is not linked to the cluster through owner ref
+						},
+					},
+					"/v1, Kind=Secret, ns2/cluster2-kubeconfig": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns2/cluster2",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "two clusters, read only 1",
+			args: args{
+				cluster: "cluster1", // read only from ns1
+				objs: func() []client.Object {
+					objs := []client.Object{}
+					objs = append(objs, test.NewFakeCluster("ns1", "cluster1").Objs()...)
+					objs = append(objs, test.NewFakeCluster("ns1", "cluster2").Objs()...)
+					return objs
+				}(),
+			},
+			want: wantGraph{
+				nodes: map[string]wantGraphItem{
+					"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1": {
+						forceMove:          true,
+						forceMoveHierarchy: true,
+					},
+					"infrastructure.cluster.x-k8s.io/v1beta1, Kind=GenericInfrastructureCluster, ns1/cluster1": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1",
+						},
+					},
+					"/v1, Kind=Secret, ns1/cluster1-ca": {
+						softOwners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1", // NB. this secret is not linked to the cluster through owner ref
+						},
+					},
+					"/v1, Kind=Secret, ns1/cluster1-kubeconfig": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// Create an objectGraph bound to a source cluster with all the CRDs for the types involved in the test.
+			graph := getObjectGraphWithObjs(tt.args.objs)
+
+			// Get all the types to be considered for discovery
+			err := getFakeDiscoveryTypes(graph)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			// finally test discovery
+			err = graph.Discovery("", tt.args.cluster)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return

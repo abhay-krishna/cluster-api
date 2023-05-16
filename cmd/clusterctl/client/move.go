@@ -38,6 +38,10 @@ type MoveOptions struct {
 	// namespace will be used.
 	Namespace string
 
+	// ClusterName defines the name of the workload cluster and its dependent objects to be moved. If unspecified,
+	// all the clusters will be moved.
+	ClusterName string
+
 	// FromDirectory apply configuration from directory.
 	FromDirectory string
 
@@ -94,7 +98,7 @@ func (c *clusterctlClient) move(options MoveOptions) error {
 		}
 	}
 
-	return fromCluster.ObjectMover().Move(options.Namespace, toCluster, options.DryRun)
+	return fromCluster.ObjectMover().Move(options.Namespace, toCluster, options.ClusterName, options.DryRun)
 }
 
 func (c *clusterctlClient) fromDirectory(options MoveOptions) error {
@@ -107,7 +111,7 @@ func (c *clusterctlClient) fromDirectory(options MoveOptions) error {
 		return err
 	}
 
-	return toCluster.ObjectMover().FromDirectory(toCluster, options.FromDirectory)
+	return toCluster.ObjectMover().FromDirectory(toCluster, options.FromDirectory, options.ClusterName)
 }
 
 func (c *clusterctlClient) toDirectory(options MoveOptions) error {
@@ -129,7 +133,7 @@ func (c *clusterctlClient) toDirectory(options MoveOptions) error {
 		return err
 	}
 
-	return fromCluster.ObjectMover().ToDirectory(options.Namespace, options.ToDirectory)
+	return fromCluster.ObjectMover().ToDirectory(options.Namespace, options.ToDirectory, options.ClusterName)
 }
 
 func (c *clusterctlClient) getClusterClient(kubeconfig Kubeconfig) (cluster.Client, error) {

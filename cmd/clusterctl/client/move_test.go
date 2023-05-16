@@ -307,11 +307,11 @@ type fakeObjectMover struct {
 	fromDirectoryErr error
 }
 
-func (f *fakeObjectMover) Move(_ context.Context, _ string, _ cluster.Client, _ bool, _ ...cluster.ResourceMutatorFunc) error {
+func (f *fakeObjectMover) Move(_ context.Context, _ string, _ cluster.Client, _ string, _ bool, _ ...cluster.ResourceMutatorFunc) error {
 	return f.moveErr
 }
 
-func (f *fakeObjectMover) ToDirectory(_ context.Context, _ string, _ string) error {
+func (f *fakeObjectMover) ToDirectory(_ context.Context, _ string, _, _ string) error {
 	return f.toDirectoryErr
 }
 
@@ -319,10 +319,10 @@ func (f *fakeObjectMover) Backup(_ context.Context, _ string, _ string) error {
 	return f.toDirectoryErr
 }
 
-func (f *fakeObjectMover) FromDirectory(_ context.Context, _ cluster.Client, _ string) error {
+func (f *fakeObjectMover) FromDirectory(_ context.Context, _ cluster.Client, _, _ string) error {
 	return f.fromDirectoryErr
 }
 
-func (f *fakeObjectMover) Restore(_ context.Context, _ cluster.Client, _ string) error {
+func (f *fakeObjectMover) Restore(_ context.Context, _ cluster.Client, _, _ string) error {
 	return f.fromDirectoryErr
 }

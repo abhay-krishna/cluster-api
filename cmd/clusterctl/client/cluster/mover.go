@@ -44,13 +44,16 @@ import (
 // ObjectMover defines methods for moving Cluster API objects to another management cluster.
 type ObjectMover interface {
 	// Move moves all the Cluster API objects existing in a namespace (or from all the namespaces if empty) to a target management cluster.
-	Move(namespace string, toCluster Client, dryRun bool) error
+	// If `clusterName` is specified (not empty string), only objects belonging to the cluster will be moved.
+	Move(namespace string, toCluster Client, clusterName string, dryRun bool) error
 
 	// ToDirectory writes all the Cluster API objects existing in a namespace (or from all the namespaces if empty) to a target directory.
-	ToDirectory(namespace string, directory string) error
+	// If `clusterName` is specified (not empty string), only objects belonging to the cluster will be moved.
+	ToDirectory(namespace string, directory, clusterName string) error
 
 	// FromDirectory reads all the Cluster API objects existing in a configured directory to a target management cluster.
-	FromDirectory(toCluster Client, directory string) error
+	// If `clusterName` is specified (not empty string), only objects belonging to the cluster will be moved.
+	FromDirectory(toCluster Client, directory, clusterName string) error
 }
 
 // objectMover implements the ObjectMover interface.
@@ -63,7 +66,7 @@ type objectMover struct {
 // ensure objectMover implements the ObjectMover interface.
 var _ ObjectMover = &objectMover{}
 
-func (o *objectMover) Move(namespace string, toCluster Client, dryRun bool) error {
+func (o *objectMover) Move(namespace string, toCluster Client, clusterName string, dryRun bool) error {
 	log := logf.Log
 	log.Info("Performing move...")
 	o.dryRun = dryRun
@@ -80,7 +83,7 @@ func (o *objectMover) Move(namespace string, toCluster Client, dryRun bool) erro
 		}
 	}
 
-	objectGraph, err := o.getObjectGraph(namespace)
+	objectGraph, err := o.getObjectGraph(namespace, clusterName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get object graph")
 	}
@@ -94,11 +97,11 @@ func (o *objectMover) Move(namespace string, toCluster Client, dryRun bool) erro
 	return o.move(objectGraph, proxy)
 }
 
-func (o *objectMover) ToDirectory(namespace string, directory string) error {
+func (o *objectMover) ToDirectory(namespace, directory, clusterName string) error {
 	log := logf.Log
 	log.Info("Moving to directory...")
 
-	objectGraph, err := o.getObjectGraph(namespace)
+	objectGraph, err := o.getObjectGraph(namespace, clusterName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get object graph")
 	}
@@ -106,7 +109,7 @@ func (o *objectMover) ToDirectory(namespace string, directory string) error {
 	return o.toDirectory(objectGraph, directory)
 }
 
-func (o *objectMover) FromDirectory(toCluster Client, directory string) error {
+func (o *objectMover) FromDirectory(toCluster Client, directory, clusterName string) error {
 	log := logf.Log
 	log.Info("Moving from directory...")
 
@@ -139,6 +142,14 @@ func (o *objectMover) FromDirectory(toCluster Client, directory string) error {
 
 	// Check whether nodes are not included in GVK considered for fromDirectory.
 	objectGraph.checkVirtualNode()
+
+	// Filter and remove nodes in the graph that do not belong to cluster
+	if clusterName != "" {
+		err = objectGraph.filterCluster(clusterName)
+		if err != nil {
+			return errors.Wrap(err, "failed to filter for cluster")
+		}
+	}
 
 	// Restore the objects to the target cluster.
 	proxy := toCluster.Proxy()
@@ -177,7 +188,7 @@ func (o *objectMover) filesToObjs(dir string) ([]unstructured.Unstructured, erro
 	return objs, nil
 }
 
-func (o *objectMover) getObjectGraph(namespace string) (*objectGraph, error) {
+func (o *objectMover) getObjectGraph(namespace, clusterName string) (*objectGraph, error) {
 	objectGraph := newObjectGraph(o.fromProxy, o.fromProviderInventory)
 
 	// Gets all the types defined by the CRDs installed by clusterctl plus the ConfigMap/Secret core types.
@@ -189,7 +200,8 @@ func (o *objectMover) getObjectGraph(namespace string) (*objectGraph, error) {
 	// Discovery the object graph for the selected types:
 	// - Nodes are defined the Kubernetes objects (Clusters, Machines etc.) identified during the discovery process.
 	// - Edges are derived by the OwnerReferences between nodes.
-	if err := objectGraph.Discovery(namespace); err != nil {
+	// - Filters and remove nodes that do not belong to provided cluster name
+	if err := objectGraph.Discovery(namespace, clusterName); err != nil {
 		return nil, errors.Wrap(err, "failed to discover the object graph")
 	}
 

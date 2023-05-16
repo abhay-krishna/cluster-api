@@ -38,6 +38,7 @@ type moveOptions struct {
 	toKubeconfig          string
 	toKubeconfigContext   string
 	namespace             string
+	filterCluster         string
 	fromDirectory         string
 	toDirectory           string
 	dryRun                bool
@@ -90,6 +91,8 @@ func init() {
 		"Read Cluster API objects and all dependencies from a directory into a management cluster.")
 	moveCmd.Flags().StringVar(&mo.hideAPIWarnings, "hide-api-warnings", "default",
 		"Set of API server warnings to hide. Valid sets are \"default\" (includes metadata.finalizer warnings), \"all\" , and \"none\".")
+	moveCmd.Flags().StringVar(&mo.filterCluster, "filter-cluster", "",
+		"Name of the cluster to be moved. All the dependent objects will also be moved. If empty, all clusters will be moved")
 
 	moveCmd.MarkFlagsMutuallyExclusive("to-directory", "to-kubeconfig")
 	moveCmd.MarkFlagsMutuallyExclusive("from-directory", "to-directory")
@@ -167,6 +170,7 @@ func runMove() error {
 		FromDirectory:  mo.fromDirectory,
 		ToDirectory:    mo.toDirectory,
 		Namespace:      mo.namespace,
+		ClusterName:    mo.filterCluster,
 		DryRun:         mo.dryRun,
 	})
 }

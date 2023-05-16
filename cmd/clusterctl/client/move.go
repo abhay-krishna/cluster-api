@@ -39,6 +39,10 @@ type MoveOptions struct {
 	// namespace will be used.
 	Namespace string
 
+	// ClusterName defines the name of the workload cluster and its dependent objects to be moved. If unspecified,
+	// all the clusters will be moved.
+	ClusterName string
+
 	// ExperimentalResourceMutatorFn accepts any number of resource mutator functions that are applied on all resources being moved.
 	// This is an experimental feature and is exposed only from the library and not (yet) through the CLI.
 	ExperimentalResourceMutators []cluster.ResourceMutatorFunc
@@ -99,7 +103,7 @@ func (c *clusterctlClient) move(ctx context.Context, options MoveOptions) error 
 		}
 	}
 
-	return fromCluster.ObjectMover().Move(ctx, options.Namespace, toCluster, options.DryRun, options.ExperimentalResourceMutators...)
+	return fromCluster.ObjectMover().Move(ctx, options.Namespace, toCluster, options.ClusterName, options.DryRun, options.ExperimentalResourceMutators...)
 }
 
 func (c *clusterctlClient) fromDirectory(ctx context.Context, options MoveOptions) error {
@@ -112,7 +116,7 @@ func (c *clusterctlClient) fromDirectory(ctx context.Context, options MoveOption
 		return err
 	}
 
-	return toCluster.ObjectMover().FromDirectory(ctx, toCluster, options.FromDirectory)
+	return toCluster.ObjectMover().FromDirectory(ctx, toCluster, options.FromDirectory, options.ClusterName)
 }
 
 func (c *clusterctlClient) toDirectory(ctx context.Context, options MoveOptions) error {
@@ -134,7 +138,7 @@ func (c *clusterctlClient) toDirectory(ctx context.Context, options MoveOptions)
 		return err
 	}
 
-	return fromCluster.ObjectMover().ToDirectory(ctx, options.Namespace, options.ToDirectory)
+	return fromCluster.ObjectMover().ToDirectory(ctx, options.Namespace, options.ToDirectory, options.ClusterName)
 }
 
 func (c *clusterctlClient) getClusterClient(ctx context.Context, kubeconfig Kubeconfig) (cluster.Client, error) {

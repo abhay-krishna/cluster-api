@@ -37,6 +37,7 @@ type BottlerocketConfig struct {
 	BottlerocketCustomBootstrapContainers []bootstrapv1.BottlerocketBootstrapContainer
 	NTPServers                            []string
 	Hostname                              string
+	CertBundle                            []bootstrapv1.CertBundle
 	RegistryMirrorCredentials
 }
 
@@ -61,6 +62,7 @@ type BottlerocketSettingsInput struct {
 	HostContainers         []bootstrapv1.BottlerocketHostContainer
 	BootstrapContainers    []bootstrapv1.BottlerocketBootstrapContainer
 	SysctlSettings         string
+	CertBundles            []bootstrapv1.CertBundle
 }
 
 // HostPath holds the path and type of a host path volume.
@@ -164,6 +166,12 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(bootSettingsTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse boot settings %s template", kind)
 	}
+	if _, err := tm.Parse(certsTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse certs %s template", kind)
+	}
+	if _, err := tm.Parse(certBundlesSliceTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse cert bundles %s template", kind)
+	}
 	t, err := tm.Parse(tpl)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse %s template", kind)
@@ -265,6 +273,12 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 			bottlerocketInput.BootKernel = parseBootSettings(config.BottlerocketSettings.Boot.BootKernelParameters)
 		}
 
+	}
+	if config.CertBundle != nil {
+		for _, cert := range config.CertBundle {
+			cert.Data = base64.StdEncoding.EncodeToString([]byte(cert.Data))
+			bottlerocketInput.CertBundles = append(bottlerocketInput.CertBundles, cert)
+		}
 	}
 
 	return generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)

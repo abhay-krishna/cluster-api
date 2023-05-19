@@ -569,6 +569,7 @@ func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta3_ClusterConfigur
 	// WARNING: in.BottlerocketHostContainers requires manual conversion: does not exist in peer-type
 	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
 	// WARNING: in.Bottlerocket requires manual conversion: does not exist in peer-type
+	// WARNING: in.CertBundles requires manual conversion: does not exist in peer-type
 	return nil
 }
 
@@ -869,6 +870,7 @@ func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(
 	// WARNING: in.BottlerocketCustomHostContainers requires manual conversion: does not exist in peer-type
 	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
 	// WARNING: in.Bottlerocket requires manual conversion: does not exist in peer-type
+	// WARNING: in.CertBundles requires manual conversion: does not exist in peer-type
 	return nil
 }
 

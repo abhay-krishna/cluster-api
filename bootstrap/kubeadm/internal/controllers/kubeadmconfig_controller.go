@@ -508,6 +508,9 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 		if scope.Config.Spec.NTP != nil && scope.Config.Spec.NTP.Enabled != nil && *scope.Config.Spec.NTP.Enabled {
 			bottlerocketConfig.NTPServers = scope.Config.Spec.NTP.Servers
 		}
+		if scope.Config.Spec.ClusterConfiguration.CertBundles != nil {
+			bottlerocketConfig.CertBundle = scope.Config.Spec.ClusterConfiguration.CertBundles
+		}
 	}
 
 	clusterdata, err := kubeadmtypes.MarshalClusterConfigurationForVersion(scope.Config.Spec.ClusterConfiguration, parsedVersion)
@@ -733,6 +736,9 @@ func (r *KubeadmConfigReconciler) joinWorker(ctx context.Context, scope *Scope) 
 		if scope.Config.Spec.NTP != nil && scope.Config.Spec.NTP.Enabled != nil && *scope.Config.Spec.NTP.Enabled {
 			bottlerocketConfig.NTPServers = scope.Config.Spec.NTP.Servers
 		}
+		if scope.Config.Spec.JoinConfiguration.CertBundles != nil {
+			bottlerocketConfig.CertBundle = scope.Config.Spec.JoinConfiguration.CertBundles
+		}
 		bootstrapJoinData, err = bottlerocket.NewNode(nodeInput, bottlerocketConfig)
 		if err != nil {
 			scope.Error(err, "Failed to create a worker bottlerocket join configuration")
@@ -879,6 +885,9 @@ func (r *KubeadmConfigReconciler) joinControlplane(ctx context.Context, scope *S
 		}
 		if scope.Config.Spec.NTP != nil && scope.Config.Spec.NTP.Enabled != nil && *scope.Config.Spec.NTP.Enabled {
 			bottlerocketConfig.NTPServers = scope.Config.Spec.NTP.Servers
+		}
+		if scope.Config.Spec.JoinConfiguration.CertBundles != nil {
+			bottlerocketConfig.CertBundle = scope.Config.Spec.JoinConfiguration.CertBundles
 		}
 		bootstrapJoinData, err = bottlerocket.NewJoinControlPlane(controlPlaneJoinInput, bottlerocketConfig)
 		if err != nil {

@@ -3024,6 +3024,22 @@ spec:
                           - superpowered
                           type: object
                         type: array
+                      certBundles:
+                        description: CertBundles holds additional trusted cert bundles.
+                        items:
+                          description: CertBundle holds the cert data.
+                          properties:
+                            data:
+                              description: Data is the actual cert.
+                              type: string
+                            name:
+                              description: Name is the name of the cert bundle.
+                              type: string
+                          required:
+                          - data
+                          - name
+                          type: object
+                        type: array
                       certificatesDir:
                         description: 'CertificatesDir specifies where to store or
                           look for all required certificates. NB: if not provided,
@@ -3905,6 +3921,22 @@ spec:
                           control-plane. Defaults to "/etc/kubernetes/pki/ca.crt".
                           TODO: revisit when there is defaulting from k/k'
                         type: string
+                      certBundles:
+                        description: CertBundles holds additional trusted cert bundles.
+                        items:
+                          description: CertBundle holds the cert data.
+                          properties:
+                            data:
+                              description: Data is the actual cert.
+                              type: string
+                            name:
+                              description: Name is the name of the cert bundle.
+                              type: string
+                          required:
+                          - data
+                          - name
+                          type: object
+                        type: array
                       controlPlane:
                         description: ControlPlane defines the additional control plane
                           instance to be deployed on the joining node. If nil, no

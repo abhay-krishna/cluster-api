@@ -129,6 +129,18 @@ reboot-to-reconcile = true
 {{.BootKernel}}
 {{- end -}}
 `
+	certsTemplate = `{{ define "certsSettings" -}}
+[settings.pki.{{.Name}}]
+data = "{{.Data}}"
+trusted = true
+{{- end -}}
+`
+	certBundlesSliceTemplate = `{{ define "certBundlesSlice" -}}
+{{- range $cBundle := .CertBundles }}
+{{template "certsSettings" $cBundle }}
+{{- end -}}
+{{- end -}}
+`
 
 	bottlerocketNodeInitSettingsTemplate = `{{template "hostContainerSlice" .}}
 
@@ -171,6 +183,10 @@ reboot-to-reconcile = true
 
 {{- if .BootKernel}}
 {{template "bootSettings" .}}
+{{- end -}}
+
+{{- if .CertBundles}}
+{{template "certBundlesSlice" .}}
 {{- end -}}
 `
 )

@@ -310,6 +310,36 @@ reboot-to-reconcile = true
 "abc" = ["def","123"]
 "foo" = ["bar"]
 `
+
+	userDataWithCertBundle = `
+[settings.host-containers.admin]
+enabled = true
+superpowered = true
+source = "ADMIN_REPO:ADMIN_TAG"
+user-data = "CnsKCSJzc2giOiB7CgkJImF1dGhvcml6ZWQta2V5cyI6IFsic3NoLXJzYSBBQUEuLi4iXQoJfQp9"
+[settings.host-containers.kubeadm-bootstrap]
+enabled = true
+superpowered = true
+source = "BOOTSTRAP_REPO:BOOTSTRAP_TAG"
+user-data = "Qk9UVExFUk9DS0VUX0JPT1RTVFJBUF9VU0VSREFUQQ=="
+
+[settings.kubernetes]
+cluster-domain = "cluster.local"
+standalone-mode = true
+authentication-mode = "tls"
+server-tls-bootstrap = false
+pod-infra-container-image = "PAUSE_REPO:PAUSE_TAG"
+provider-id = "PROVIDERID"
+
+[settings.network]
+hostname = "hostname"
+
+[settings.pki.bundle1]
+data = "QUJDREVG"
+trusted = true
+[settings.pki.bundle2]
+data = "MTIzNDU2"
+trusted = true`
 )
 
 var (
@@ -568,6 +598,29 @@ func TestGetBottlerocketNodeUserData(t *testing.T) {
 				},
 			},
 			output: BootSettingsUserData,
+		},
+		{
+			name: "with custom cert bundle settings",
+			config: &BottlerocketConfig{
+				BottlerocketAdmin:     brAdmin,
+				BottlerocketBootstrap: brBootstrap,
+				Hostname:              hostname,
+				Pause:                 pause,
+				KubeletExtraArgs: map[string]string{
+					"provider-id": "PROVIDERID",
+				},
+				CertBundle: []bootstrapv1.CertBundle{
+					{
+						Name: "bundle1",
+						Data: "ABCDEF",
+					},
+					{
+						Name: "bundle2",
+						Data: "123456",
+					},
+				},
+			},
+			output: userDataWithCertBundle,
 		},
 	}
 	for _, testcase := range testcases {

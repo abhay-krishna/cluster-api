@@ -171,6 +171,10 @@ type ClusterConfiguration struct {
 	// This is only for bottlerocket.
 	// +optional
 	Bottlerocket *BottlerocketSettings `json:"bottlerocket,omitempty"`
+
+	// CertBundles holds additional trusted cert bundles.
+	// +optional
+	CertBundles []CertBundle `json:"certBundles,omitempty"`
 }
 
 // BottlerocketSettings define bottlerocket settings that can be configured on bottlerocket nodes.
@@ -534,6 +538,10 @@ type JoinConfiguration struct {
 	// This is only for bottlerocket.
 	// +optional
 	Bottlerocket *BottlerocketSettings `json:"bottlerocket,omitempty"`
+
+	// CertBundles holds additional trusted cert bundles.
+	// +optional
+	CertBundles []CertBundle `json:"certBundles,omitempty"`
 }
 
 // BottlerocketHostContainer describes a host image for Bottlerocket
@@ -572,6 +580,15 @@ type BottlerocketBootstrapContainer struct {
 	// UserData is the base64-encoded userdata.
 	// +optional
 	UserData string `json:"userData,omitempty"`
+}
+
+// CertBundle holds the cert data.
+type CertBundle struct {
+	// Name is the name of the cert bundle.
+	Name string `json:"name"`
+
+	// Data is the actual cert.
+	Data string `json:"data"`
 }
 
 // JoinControlPlane contains elements describing an additional control plane instance to be deployed on the joining node.

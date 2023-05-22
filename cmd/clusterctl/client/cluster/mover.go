@@ -142,7 +142,10 @@ func (o *objectMover) FromDirectory(toCluster Client, directory, cluster string)
 
 	// Filter and remove nodes in the graph that do not belong to cluster
 	if cluster != "" {
-		objectGraph.filterCluster(cluster)
+		err = objectGraph.filterCluster(cluster)
+		if err != nil {
+			return errors.Wrap(err, "failed to filter for cluster")
+		}
 	}
 
 	// Restore the objects to the target cluster.

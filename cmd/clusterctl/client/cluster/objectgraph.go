@@ -475,27 +475,34 @@ func (o *objectGraph) Discovery(namespace, cluster string) error {
 
 	// Filter and remove nodes in the graph that do not belong to cluster
 	if cluster != "" {
-		o.filterCluster(cluster)
+		return o.filterCluster(cluster)
 	}
 
 	return nil
 }
 
 // filterCluster removes all objects but provided cluster and its dependents and soft-dependents
-func (o *objectGraph) filterCluster(cluster string) {
+func (o *objectGraph) filterCluster(cluster string) error {
 	for _, node := range o.getNodes() {
+		clusterTenant := false
 		for tenant, _ := range node.tenant {
 
 			// check if tenant is "Cluster" Kind and if the name matches with the provided cluster name
-			if tenant.identity.GroupVersionKind().GroupKind() == clusterv1.GroupVersion.WithKind("Cluster").GroupKind() &&
-				tenant.identity.Name != cluster {
-				if _, ok := o.uidToNode[node.identity.UID]; ok {
-					delete(o.uidToNode, node.identity.UID)
+			if tenant.identity.GroupVersionKind().GroupKind() == clusterv1.GroupVersion.WithKind("Cluster").GroupKind() {
+				if clusterTenant {
+					return fmt.Errorf("more than one cluster tenant identified for node - %s", node.identity.Name)
 				}
-				break
+
+				if tenant.identity.Name != cluster {
+					if _, ok := o.uidToNode[node.identity.UID]; ok {
+						delete(o.uidToNode, node.identity.UID)
+					}
+				}
+				clusterTenant = true
 			}
 		}
 	}
+	return nil
 }
 
 func getObjList(proxy Proxy, typeMeta metav1.TypeMeta, selectors []client.ListOption, objList *unstructured.UnstructuredList) error {

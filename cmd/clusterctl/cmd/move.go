@@ -108,7 +108,7 @@ func runMove() error {
 		FromDirectory:  mo.fromDirectory,
 		ToDirectory:    mo.toDirectory,
 		Namespace:      mo.namespace,
-		Cluster:        mo.filterCluster,
+		ClusterName:    mo.filterCluster,
 		DryRun:         mo.dryRun,
 	})
 }

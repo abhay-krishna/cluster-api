@@ -411,7 +411,7 @@ func getCRDList(proxy Proxy, crdList *apiextensionsv1.CustomResourceDefinitionLi
 
 // Discovery reads all the Kubernetes objects existing in a namespace (or in all namespaces if empty) for the types received in input, and then adds
 // everything to the objects graph. Filters for objects only belonging to specific cluster if provided.
-func (o *objectGraph) Discovery(namespace, cluster string) error {
+func (o *objectGraph) Discovery(namespace, clusterName string) error {
 	log := logf.Log
 	log.Info("Discovering Cluster API objects")
 
@@ -474,31 +474,38 @@ func (o *objectGraph) Discovery(namespace, cluster string) error {
 	o.setTenants()
 
 	// Filter and remove nodes in the graph that do not belong to cluster
-	if cluster != "" {
-		return o.filterCluster(cluster)
+	if clusterName != "" {
+		return o.filterCluster(clusterName)
 	}
 
 	return nil
 }
 
 // filterCluster removes all objects but provided cluster and its dependents and soft-dependents
-func (o *objectGraph) filterCluster(cluster string) error {
-	for _, node := range o.getNodes() {
-		clusterTenant := false
-		for tenant, _ := range node.tenant {
+func (o *objectGraph) filterCluster(clusterName string) error {
+	for _, object := range o.getNodes() {
 
-			// check if tenant is "Cluster" Kind and if the name matches with the provided cluster name
+		hasFilterCluster := false
+		var clusterTenants []string
+		for tenant, _ := range object.tenant {
 			if tenant.identity.GroupVersionKind().GroupKind() == clusterv1.GroupVersion.WithKind("Cluster").GroupKind() {
-				if clusterTenant {
-					return fmt.Errorf("more than one cluster tenant identified for node - %s", node.identity.Name)
+				clusterTenants = append(clusterTenants, tenant.identity.Name)
+				if tenant.identity.Name == clusterName {
+					hasFilterCluster = true
 				}
+			}
+		}
 
-				if tenant.identity.Name != cluster {
-					if _, ok := o.uidToNode[node.identity.UID]; ok {
-						delete(o.uidToNode, node.identity.UID)
-					}
-				}
-				clusterTenant = true
+		// Return error only when node has more than 1 cluster tenant and one of those cluster tenant is the clusterName
+		// being filtered for. This is to prevent moving an object that more than one cluster is dependent on.
+		if hasFilterCluster && len(clusterTenants) > 1 {
+			return fmt.Errorf("resource %s is a dependent of clusters %s. Only one cluster dependent allowed",
+				object.identity.Name, strings.Join(clusterTenants, ","))
+		}
+
+		if !hasFilterCluster {
+			if _, ok := o.uidToNode[object.identity.UID]; ok {
+				delete(o.uidToNode, object.identity.UID)
 			}
 		}
 	}

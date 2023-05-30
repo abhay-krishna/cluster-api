@@ -510,6 +510,14 @@ func (o *objectGraph) filterCluster(clusterName string) error {
 				object.identity.Name, strings.Join(clusterTenants, ","))
 		}
 
+		// CAPI has a force move label that can be used on CRD to identify objects to be moved CRDs with that label has
+		// `forceMove` set to true. Only move forceMove nodes if and only if they do not have a cluster Tenant.
+		// If an object has `forceMove` and also has a clusterTenant, the object has clear owner ref assigned and can be
+		// dropped if the cluster being filtered is not part of its tenants
+		if len(clusterTenants) == 0 && object.forceMove {
+			continue
+		}
+
 		if !hasFilterCluster {
 			if _, ok := o.uidToNode[object.identity.UID]; ok {
 				delete(o.uidToNode, object.identity.UID)

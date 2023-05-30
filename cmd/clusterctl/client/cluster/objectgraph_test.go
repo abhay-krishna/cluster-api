@@ -1931,6 +1931,49 @@ func TestObjectGraph_DiscoveryByNamespace(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "two clusters with external force object, read only 1 cluster & both external objects",
+			args: args{
+				cluster: "cluster1", // read only from ns1
+				objs: func() []client.Object {
+					objs := []client.Object{}
+					objs = append(objs, test.NewFakeCluster("ns1", "cluster1").Objs()...)
+					objs = append(objs, test.NewFakeExternalObject("ns1", "externalObject1").Objs()...)
+					objs = append(objs, test.NewFakeCluster("ns1", "cluster2").Objs()...)
+					objs = append(objs, test.NewFakeExternalObject("ns2", "externalObject2").Objs()...)
+					return objs
+				}(),
+			},
+			want: wantGraph{
+				nodes: map[string]wantGraphItem{
+					"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1": {
+						forceMove:          true,
+						forceMoveHierarchy: true,
+					},
+					"infrastructure.cluster.x-k8s.io/v1beta1, Kind=GenericInfrastructureCluster, ns1/cluster1": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1",
+						},
+					},
+					"/v1, Kind=Secret, ns1/cluster1-ca": {
+						softOwners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1", // NB. this secret is not linked to the cluster through owner ref
+						},
+					},
+					"/v1, Kind=Secret, ns1/cluster1-kubeconfig": {
+						owners: []string{
+							"cluster.x-k8s.io/v1beta1, Kind=Cluster, ns1/cluster1",
+						},
+					},
+					"external.cluster.x-k8s.io/v1beta1, Kind=GenericExternalObject, ns1/externalObject1": {
+						forceMove: true,
+					},
+					"external.cluster.x-k8s.io/v1beta1, Kind=GenericExternalObject, ns2/externalObject2": {
+						forceMove: true,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

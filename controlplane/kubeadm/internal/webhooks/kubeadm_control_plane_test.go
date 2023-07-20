@@ -331,6 +331,10 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 							ImageTag:        "1.6.5",
 						},
 					},
+					RegistryMirror: bootstrapv1.RegistryMirrorConfiguration{
+						Endpoint: "https://1.1.1.1:1111",
+						CACert:   "test-cert",
+					},
 				},
 				JoinConfiguration: &bootstrapv1.JoinConfiguration{
 					Discovery: bootstrapv1.Discovery{
@@ -340,6 +344,10 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 					},
 					NodeRegistration: bootstrapv1.NodeRegistrationOptions{
 						Name: "test",
+					},
+					RegistryMirror: bootstrapv1.RegistryMirrorConfiguration{
+						Endpoint: "https://1.1.1.1:1111",
+						CACert:   "test-cert",
 					},
 				},
 				PreKubeadmCommands: []string{
@@ -734,6 +742,18 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 
 	validUpdateJoinConfBRCustomBootstrapContainers := before.DeepCopy()
 	validUpdateJoinConfBRCustomBootstrapContainers.Spec.KubeadmConfigSpec.JoinConfiguration.BottlerocketCustomBootstrapContainers = []bootstrapv1.BottlerocketBootstrapContainer{{ImageMeta: bootstrapv1.ImageMeta{ImageTag: "v1.1.0+new"}}}
+
+	validUpdateClusterConfigRegistryMirrorCACert := before.DeepCopy()
+	validUpdateClusterConfigRegistryMirrorCACert.Spec.KubeadmConfigSpec.ClusterConfiguration.RegistryMirror.CACert = "foo:bar"
+
+	validUpdateJoinConfigRegistryMirrorCACert := before.DeepCopy()
+	validUpdateJoinConfigRegistryMirrorCACert.Spec.KubeadmConfigSpec.JoinConfiguration.RegistryMirror.CACert = "foo:bar"
+
+	validUpdateClusterConfigRegistryMirrorEndpoint := before.DeepCopy()
+	validUpdateClusterConfigRegistryMirrorEndpoint.Spec.KubeadmConfigSpec.ClusterConfiguration.RegistryMirror.Endpoint = "https://0.0.0.0:6443"
+
+	validUpdateJoinConfigRegistryMirrorEndpoint := before.DeepCopy()
+	validUpdateJoinConfigRegistryMirrorEndpoint.Spec.KubeadmConfigSpec.JoinConfiguration.RegistryMirror.Endpoint = "https://0.0.0.0:6443"
 
 	tests := []struct {
 		name                  string
@@ -1134,6 +1154,31 @@ func TestKubeadmControlPlaneValidateUpdate(t *testing.T) {
 			expectErr: false,
 			before:    before,
 			kcp:       validUpdateJoinConfBRCustomBootstrapContainers,
+		},
+		{
+			name:      "should allow changes to join configuration registry mirror caCert",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateJoinConfigRegistryMirrorCACert,
+		},
+		{
+			name:      "should allow changes to join configuration registry mirror endpoint",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateJoinConfigRegistryMirrorEndpoint,
+		},
+		{
+			name:      "should allow changes to cluster configuration registry mirror caCert",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateClusterConfigRegistryMirrorCACert,
+		},
+
+		{
+			name:      "should allow changes to cluster configuration registry mirror endpoint",
+			expectErr: false,
+			before:    before,
+			kcp:       validUpdateClusterConfigRegistryMirrorEndpoint,
 		},
 	}
 

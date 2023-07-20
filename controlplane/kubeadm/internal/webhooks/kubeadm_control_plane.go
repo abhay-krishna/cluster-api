@@ -192,6 +192,7 @@ func (webhook *KubeadmControlPlane) ValidateUpdate(_ context.Context, oldObj, ne
 		{spec, kubeadmConfigSpec, clusterConfiguration, controllerManager, "*"},
 		{spec, kubeadmConfigSpec, clusterConfiguration, scheduler},
 		{spec, kubeadmConfigSpec, clusterConfiguration, scheduler, "*"},
+		{spec, kubeadmConfigSpec, clusterConfiguration, "registryMirror", "*"},
 		// spec.kubeadmConfigSpec.initConfiguration
 		{spec, kubeadmConfigSpec, initConfiguration, nodeRegistration},
 		{spec, kubeadmConfigSpec, initConfiguration, nodeRegistration, "*"},
@@ -217,6 +218,7 @@ func (webhook *KubeadmControlPlane) ValidateUpdate(_ context.Context, oldObj, ne
 		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketControl", "*"},
 		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketCustomBootstrapContainers"},
 		{spec, kubeadmConfigSpec, joinConfiguration, "bottlerocketSettings", "*"},
+		{spec, kubeadmConfigSpec, joinConfiguration, "registryMirror", "*"},
 		{spec, kubeadmConfigSpec, joinConfiguration, "pause", "*"},
 		// spec.kubeadmConfigSpec
 		{spec, kubeadmConfigSpec, preKubeadmCommands},

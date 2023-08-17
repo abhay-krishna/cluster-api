@@ -305,7 +305,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	if !externalMachine.Exists() {
 		// NOTE: FailureDomains don't mean much in CAPD since it's all local, but we are setting a label on
 		// each container, so we can check placement.
-		if err := externalMachine.Create(ctx, dockerMachine.Spec.CustomImage, role, machine.Spec.Version, docker.FailureDomainLabel(machine.Spec.FailureDomain), dockerMachine.Spec.ExtraMounts); err != nil {
+		if err := externalMachine.Create(ctx, dockerMachine.Spec.CustomImage, role, machine.Spec.Version, docker.FailureDomainLabel(machine.Spec.FailureDomain), dockerMachine.Spec.ExtraMounts, util.IsEtcdMachine(machine)); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to create worker DockerMachine")
 		}
 	}
@@ -392,7 +392,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 			}()
 
 			// Run the bootstrap script. Simulates cloud-init/Ignition.
-			if err := externalMachine.ExecBootstrap(timeoutCtx, bootstrapData, format, version, dockerMachine.Spec.CustomImage); err != nil {
+			if err := externalMachine.ExecBootstrap(timeoutCtx, bootstrapData, format, version, dockerMachine.Spec.CustomImage, util.IsEtcdMachine(machine)); err != nil {
 				conditions.MarkFalse(dockerMachine, infrav1.BootstrapExecSucceededCondition, infrav1.BootstrapFailedReason, clusterv1.ConditionSeverityWarning, "Repeating bootstrap")
 				return ctrl.Result{}, errors.Wrap(err, "failed to exec DockerMachine bootstrap")
 			}
@@ -421,23 +421,27 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	// set to true after a control plane machine has a node ref. If we would requeue here in this case, the
 	// Machine will never get a node ref as ProviderID is required to set the node ref, so we would get a deadlock.
 	if cluster.Spec.ControlPlaneRef != nil &&
-		!conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) {
+		!conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) &&
+		!util.IsEtcdMachine(machine) {
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 
-	// Usually a cloud provider will do this, but there is no docker-cloud provider.
-	// Requeue if there is an error, as this is likely momentary load balancer
-	// state changes during control plane provisioning.
-	remoteClient, err := r.ClusterCache.GetClient(ctx, client.ObjectKeyFromObject(cluster))
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to generate workload cluster client")
-	}
-	if err := externalMachine.CloudProviderNodePatch(ctx, remoteClient, dockerMachine); err != nil {
-		if errors.As(err, &docker.ContainerNotRunningError{}) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to patch the Kubernetes node with the machine providerID")
+	// In case of an etcd cluster, there is no concept of kubernetes node. So we can generate the node Provider ID and set it on machine spec directly
+	if !util.IsEtcdMachine(machine) {
+		// Usually a cloud provider will do this, but there is no docker-cloud provider.
+		// Requeue if there is an error, as this is likely momentary load balancer
+		// state changes during control plane provisioning.
+		remoteClient, err := r.ClusterCache.GetClient(ctx, client.ObjectKeyFromObject(cluster))
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to generate workload cluster client")
 		}
-		log.Error(err, "Failed to patch the Kubernetes node with the machine providerID")
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		if err := externalMachine.CloudProviderNodePatch(ctx, remoteClient, dockerMachine); err != nil {
+			if errors.As(err, &docker.ContainerNotRunningError{}) {
+				return ctrl.Result{}, errors.Wrap(err, "failed to patch the Kubernetes node with the machine providerID")
+			}
+			log.Error(err, "Failed to patch the Kubernetes node with the machine providerID")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 	}
 	// Set ProviderID so the Cluster API Machine Controller can pull it
 	providerID := externalMachine.ProviderID()

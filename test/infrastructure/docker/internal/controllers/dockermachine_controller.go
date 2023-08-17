@@ -255,7 +255,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	if !externalMachine.Exists() {
 		// NOTE: FailureDomains don't mean much in CAPD since it's all local, but we are setting a label on
 		// each container, so we can check placement.
-		if err := externalMachine.Create(ctx, dockerMachine.Spec.CustomImage, role, machine.Spec.Version, docker.FailureDomainLabel(machine.Spec.FailureDomain), dockerMachine.Spec.ExtraMounts); err != nil {
+		if err := externalMachine.Create(ctx, dockerMachine.Spec.CustomImage, role, machine.Spec.Version, docker.FailureDomainLabel(machine.Spec.FailureDomain), dockerMachine.Spec.ExtraMounts, util.IsEtcdMachine(machine)); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to create worker DockerMachine")
 		}
 	}
@@ -335,7 +335,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 			}()
 
 			// Run the bootstrap script. Simulates cloud-init/Ignition.
-			if err := externalMachine.ExecBootstrap(timeoutCtx, bootstrapData, format, machine.Spec.Version, dockerMachine.Spec.CustomImage); err != nil {
+			if err := externalMachine.ExecBootstrap(timeoutCtx, bootstrapData, format, machine.Spec.Version, dockerMachine.Spec.CustomImage, util.IsEtcdMachine(machine)); err != nil {
 				conditions.MarkFalse(dockerMachine, infrav1.BootstrapExecSucceededCondition, infrav1.BootstrapFailedReason, clusterv1.ConditionSeverityWarning, "Repeating bootstrap")
 				return ctrl.Result{}, errors.Wrap(err, "failed to exec DockerMachine bootstrap")
 			}
@@ -364,12 +364,12 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	// Machine will never get a node ref as ProviderID is required to set the node ref, so we would get a deadlock.
 	if cluster.Spec.ControlPlaneRef != nil &&
 		!conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) &&
-		!isEtcdMachine(machine) {
+		!util.IsEtcdMachine(machine) {
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 
 	// In case of an etcd cluster, there is no concept of kubernetes node. So we can generate the node Provider ID and set it on machine spec directly
-	if !isEtcdMachine(machine) {
+	if !util.IsEtcdMachine(machine) {
 		// Usually a cloud provider will do this, but there is no docker-cloud provider.
 		// Requeue if there is an error, as this is likely momentary load balancer
 		// state changes during control plane provisioning.
@@ -538,9 +538,4 @@ func setMachineAddress(ctx context.Context, dockerMachine *infrav1.DockerMachine
 	}
 
 	return nil
-}
-
-func isEtcdMachine(machine *clusterv1.Machine) bool {
-	_, ok := machine.Labels[clusterv1.MachineEtcdClusterLabelName]
-	return ok
 }

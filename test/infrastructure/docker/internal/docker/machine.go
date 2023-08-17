@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/cluster-api/test/infrastructure/docker/internal/provisioning/ignition"
 	"sigs.k8s.io/cluster-api/test/infrastructure/kind"
 	"sigs.k8s.io/cluster-api/util/patch"
+	versionutil "sigs.k8s.io/cluster-api/util/version"
 )
 
 var (
@@ -201,23 +202,35 @@ func (m *Machine) ContainerImage() string {
 }
 
 // Create creates a docker container hosting a Kubernetes node.
-func (m *Machine) Create(ctx context.Context, image string, role string, version *string, labels map[string]string, mounts []infrav1.Mount) error {
+func (m *Machine) Create(ctx context.Context, image string, role string, version *string, labels map[string]string, mounts []infrav1.Mount, isEtcdMachine bool) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	// Create if not exists.
 	if m.container == nil {
 		var err error
+		var semVer semver.Version
 
-		// Get the KindMapping for the target K8s version.
-		// NOTE: The KindMapping allows to select the most recent kindest/node image available, if any, as well as
-		// provide info about the mode to be used when starting the kindest/node image itself.
-		if version == nil {
-			return errors.New("cannot create a DockerMachine for a nil version")
-		}
+		// External etcd machines do not set a version field in the machine.Spec.Version.
+		// So we are parsing the Kubernetes semantic version from the Kind node tag and
+		// using that to get the Kind Mapping.
+		if isEtcdMachine {
+			nodeImageTag := strings.Split(image, ":")[1]
+			semVer, err = versionutil.ParseMajorMinorPatch(nodeImageTag)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse semantic version from image tag")
+			}
+		} else {
+			// Parse the semver from the Spec.Version if not nil and get the KindMapping using the semver.
+			// NOTE: The KindMapping allows to select the most recent kindest/node image available, if any, as well as
+			// provide info about the mode to be used when starting the kindest/node image itself.
+			if version == nil {
+				return errors.New("cannot create a DockerMachine for a nil version")
+			}
 
-		semVer, err := semver.Parse(strings.TrimPrefix(*version, "v"))
-		if err != nil {
-			return errors.Wrap(err, "failed to parse DockerMachine version")
+			semVer, err = semver.Parse(strings.TrimPrefix(*version, "v"))
+			if err != nil {
+				return errors.Wrap(err, "failed to parse DockerMachine version")
+			}
 		}
 
 		kindMapping := kind.GetMapping(semVer, image)
@@ -329,23 +342,37 @@ func (m *Machine) PreloadLoadImages(ctx context.Context, images []string) error 
 }
 
 // ExecBootstrap runs bootstrap on a node, this is generally `kubeadm <init|join>`.
-func (m *Machine) ExecBootstrap(ctx context.Context, data string, format bootstrapv1.Format, version *string, image string) error {
+func (m *Machine) ExecBootstrap(ctx context.Context, data string, format bootstrapv1.Format, version *string, image string, isEtcdMachine bool) error {
 	log := ctrl.LoggerFrom(ctx)
 
 	if m.container == nil {
 		return errors.New("unable to set ExecBootstrap. the container hosting this machine does not exists")
 	}
 
-	// Get the kindMapping for the target K8s version.
-	// NOTE: The kindMapping allows to select the most recent kindest/node image available, if any, as well as
-	// provide info about the mode to be used when starting the kindest/node image itself.
-	if version == nil {
-		return errors.New("cannot create a DockerMachine for a nil version")
-	}
+	var err error
+	var semVer semver.Version
 
-	semVer, err := semver.Parse(strings.TrimPrefix(*version, "v"))
-	if err != nil {
-		return errors.Wrap(err, "failed to parse DockerMachine version")
+	// External etcd machines do not set a version field in the machine.Spec.Version.
+	// So we are parsing the Kubernetes semantic version from the Kind node tag and
+	// using that to get the Kind Mapping.
+	if isEtcdMachine {
+		nodeImageTag := strings.Split(image, ":")[1]
+		semVer, err = versionutil.ParseMajorMinorPatch(nodeImageTag)
+		if err != nil {
+			return errors.Wrap(err, "failed to parse semantic version from image tag")
+		}
+	} else {
+		// Parse the semver from the Spec.Version if not nil and get the KindMapping using the semver.
+		// NOTE: The KindMapping allows to select the most recent kindest/node image available, if any, as well as
+		// provide info about the mode to be used when starting the kindest/node image itself.
+		if version == nil {
+			return errors.New("cannot create a DockerMachine for a nil version")
+		}
+
+		semVer, err = semver.Parse(strings.TrimPrefix(*version, "v"))
+		if err != nil {
+			return errors.Wrap(err, "failed to parse DockerMachine version")
+		}
 	}
 
 	kindMapping := kind.GetMapping(semVer, image)

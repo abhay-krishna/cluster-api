@@ -1934,7 +1934,7 @@ func TestObjectGraph_DiscoveryByNamespace(t *testing.T) {
 		{
 			name: "two clusters with external force object, read only 1 cluster & both external objects",
 			args: args{
-				cluster: "cluster1", // read only from ns1
+				namespace: "ns1", // read only from ns1
 				objs: func() []client.Object {
 					objs := []client.Object{}
 					objs = append(objs, test.NewFakeCluster("ns1", "cluster1").Objs()...)

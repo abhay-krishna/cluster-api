@@ -41,7 +41,6 @@ import (
 	"k8s.io/utils/pointer"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/test/infrastructure/kind"
 )
 
 const (
@@ -411,9 +410,11 @@ func (d *dockerRuntime) RunContainer(ctx context.Context, runConfig *RunContaine
 	networkConfig := network.NetworkingConfig{}
 
 	// NOTE: starting from Kind 0.20 kind requires CgroupnsMode to be set to private.
-	if runConfig.KindMode != kind.ModeNone && runConfig.KindMode != kind.Mode0_19 {
-		hostConfig.CgroupnsMode = "private"
-	}
+	// AWS: groupns = private breaks on AL2 nodes, kind 0.20 still "supports" non-private mode
+	// but it is deprecated it. For now we revert to the previous behavior.
+	// if runConfig.KindMode != kind.ModeNone && runConfig.KindMode != kind.Mode0_19 {
+	// 	hostConfig.CgroupnsMode = "private"
+	// }
 
 	if runConfig.IPFamily == clusterv1.IPv6IPFamily || runConfig.IPFamily == clusterv1.DualStackIPFamily {
 		hostConfig.Sysctls = map[string]string{

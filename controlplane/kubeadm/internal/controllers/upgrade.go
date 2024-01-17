@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"time"
 
 	"github.com/blang/semver/v4"
 	"github.com/pkg/errors"
@@ -27,6 +28,7 @@ import (
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controlplane/kubeadm/internal"
+	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/collections"
 	"sigs.k8s.io/cluster-api/util/version"
 )
@@ -38,7 +40,7 @@ func (r *KubeadmControlPlaneReconciler) upgradeControlPlane(
 ) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
-	if controlPlane.KCP.Spec.RolloutStrategy == nil || controlPlane.KCP.Spec.RolloutStrategy.RollingUpdate == nil {
+	if controlPlane.KCP.Spec.RolloutStrategy == nil {
 		return ctrl.Result{}, errors.New("rolloutStrategy is not set")
 	}
 
@@ -124,8 +126,12 @@ func (r *KubeadmControlPlaneReconciler) upgradeControlPlane(
 			return r.scaleUpControlPlane(ctx, controlPlane)
 		}
 		return r.scaleDownControlPlane(ctx, controlPlane, machinesRequireUpgrade)
+	case controlplanev1.InPlaceUpgradeStrategyType:
+		annotations.AddAnnotations(controlPlane.KCP, map[string]string{controlplanev1.InPlaceUpgradeAnnotation: "true"})
+		logger.Info("RolloutStrategy type set to InPlaceUpgradeStrategyType, adding the annotation and requeuing", "annotation", controlplanev1.InPlaceUpgradeAnnotation)
+		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	default:
-		logger.Info("RolloutStrategy type is not set to RollingUpdateStrategyType, unable to determine the strategy for rolling out machines")
+		logger.Info("RolloutStrategy type is not set to RollingUpdateStrategyType or InPlaceUpgradeStrategyType, unable to determine the strategy for rolling out machines")
 		return ctrl.Result{}, nil
 	}
 }

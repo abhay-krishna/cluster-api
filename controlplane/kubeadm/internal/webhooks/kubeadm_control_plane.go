@@ -438,7 +438,7 @@ func validateRolloutBefore(rolloutBefore *controlplanev1.RolloutBefore, pathPref
 func validateRolloutStrategy(rolloutStrategy *controlplanev1.RolloutStrategy, replicas *int32, pathPrefix *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	if rolloutStrategy == nil {
+	if rolloutStrategy == nil || rolloutStrategy.Type == controlplanev1.InPlaceUpgradeStrategyType {
 		return allErrs
 	}
 
@@ -447,7 +447,7 @@ func validateRolloutStrategy(rolloutStrategy *controlplanev1.RolloutStrategy, re
 			allErrs,
 			field.Required(
 				pathPrefix.Child("type"),
-				"only RollingUpdateStrategyType is supported",
+				"only RollingUpdateStrategyType and InPlaceUpgradeStrategyType are supported",
 			),
 		)
 	}

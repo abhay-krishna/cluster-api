@@ -580,6 +580,26 @@ spec:
                                 description: Endpoint defines the registry mirror
                                   endpoint to use for pulling images
                                 type: string
+                              mirrors:
+                                description: Mirrors defines a list of image registry
+                                  mirrors.
+                                items:
+                                  description: Mirror holds the settings for mirroring
+                                    a registry.
+                                  properties:
+                                    endpoints:
+                                      description: |-
+                                        Endpoints defines the registry mirror endpoints to use for pulling images.
+                                        Currently we support only one private registry. Hence endpoints would have only one entry.
+                                      items:
+                                        type: string
+                                      type: array
+                                    registry:
+                                      description: Registry defines the registry we
+                                        are mirroring to the endpoint.
+                                      type: string
+                                  type: object
+                                type: array
                             type: object
                           scheduler:
                             description: Scheduler contains extra settings for the
@@ -1354,6 +1374,26 @@ spec:
                                 description: Endpoint defines the registry mirror
                                   endpoint to use for pulling images
                                 type: string
+                              mirrors:
+                                description: Mirrors defines a list of image registry
+                                  mirrors.
+                                items:
+                                  description: Mirror holds the settings for mirroring
+                                    a registry.
+                                  properties:
+                                    endpoints:
+                                      description: |-
+                                        Endpoints defines the registry mirror endpoints to use for pulling images.
+                                        Currently we support only one private registry. Hence endpoints would have only one entry.
+                                      items:
+                                        type: string
+                                      type: array
+                                    registry:
+                                      description: Registry defines the registry we
+                                        are mirroring to the endpoint.
+                                      type: string
+                                  type: object
+                                type: array
                             type: object
                         type: object
                       mounts:
@@ -2039,6 +2079,26 @@ spec:
                                 description: Endpoint defines the registry mirror
                                   endpoint to use for pulling images
                                 type: string
+                              mirrors:
+                                description: Mirrors defines a list of image registry
+                                  mirrors.
+                                items:
+                                  description: Mirror holds the settings for mirroring
+                                    a registry.
+                                  properties:
+                                    endpoints:
+                                      description: |-
+                                        Endpoints defines the registry mirror endpoints to use for pulling images.
+                                        Currently we support only one private registry. Hence endpoints would have only one entry.
+                                      items:
+                                        type: string
+                                      type: array
+                                    registry:
+                                      description: Registry defines the registry we
+                                        are mirroring to the endpoint.
+                                      type: string
+                                  type: object
+                                type: array
                             type: object
                           scheduler:
                             description: Scheduler contains extra settings for the
@@ -2815,6 +2875,26 @@ spec:
                                 description: Endpoint defines the registry mirror
                                   endpoint to use for pulling images
                                 type: string
+                              mirrors:
+                                description: Mirrors defines a list of image registry
+                                  mirrors.
+                                items:
+                                  description: Mirror holds the settings for mirroring
+                                    a registry.
+                                  properties:
+                                    endpoints:
+                                      description: |-
+                                        Endpoints defines the registry mirror endpoints to use for pulling images.
+                                        Currently we support only one private registry. Hence endpoints would have only one entry.
+                                      items:
+                                        type: string
+                                      type: array
+                                    registry:
+                                      description: Registry defines the registry we
+                                        are mirroring to the endpoint.
+                                      type: string
+                                  type: object
+                                type: array
                             type: object
                         type: object
                       mounts:
@@ -3923,6 +4003,26 @@ spec:
                                 description: Endpoint defines the registry mirror
                                   endpoint to use for pulling images
                                 type: string
+                              mirrors:
+                                description: Mirrors defines a list of image registry
+                                  mirrors.
+                                items:
+                                  description: Mirror holds the settings for mirroring
+                                    a registry.
+                                  properties:
+                                    endpoints:
+                                      description: |-
+                                        Endpoints defines the registry mirror endpoints to use for pulling images.
+                                        Currently we support only one private registry. Hence endpoints would have only one entry.
+                                      items:
+                                        type: string
+                                      type: array
+                                    registry:
+                                      description: Registry defines the registry we
+                                        are mirroring to the endpoint.
+                                      type: string
+                                  type: object
+                                type: array
                             type: object
                           scheduler:
                             description: Scheduler contains extra settings for the
@@ -4512,6 +4612,26 @@ spec:
                                 description: Endpoint defines the registry mirror
                                   endpoint to use for pulling images
                                 type: string
+                              mirrors:
+                                description: Mirrors defines a list of image registry
+                                  mirrors.
+                                items:
+                                  description: Mirror holds the settings for mirroring
+                                    a registry.
+                                  properties:
+                                    endpoints:
+                                      description: |-
+                                        Endpoints defines the registry mirror endpoints to use for pulling images.
+                                        Currently we support only one private registry. Hence endpoints would have only one entry.
+                                      items:
+                                        type: string
+                                      type: array
+                                    registry:
+                                      description: Registry defines the registry we
+                                        are mirroring to the endpoint.
+                                      type: string
+                                  type: object
+                                type: array
                             type: object
                           skipPhases:
                             description: |-

@@ -74,8 +74,11 @@ no-proxy = [{{stringsJoin .NoProxyEndpoints "," }}]
 {{- end -}}
 `
 	registryMirrorTemplate = `{{ define "registryMirrorSettings" -}}
-[settings.container-registry.mirrors]
-"public.ecr.aws" = ["https://{{.RegistryMirrorEndpoint}}"]
+{{- range $orig, $mirror := .RegistryMirrorMap }}
+[[settings.container-registry.mirrors]]
+registry = "{{ $orig }}"
+endpoint = [{{stringsJoin $mirror "," }}]
+{{- end -}}
 {{- end -}}
 `
 	registryMirrorCACertTemplate = `{{ define "registryMirrorCACertSettings" -}}
@@ -88,16 +91,21 @@ trusted=true
 	// to "public.ecr.aws" rather than the mirror's endpoint
 	// TODO: Once the bottlerocket fixes are in we need to remove the "public.ecr.aws" creds
 	registryMirrorCredentialsTemplate = `{{define "registryMirrorCredentialsSettings" -}}
+{{- range $orig, $mirror := .RegistryMirrorMap }}
+{{- if (eq $orig "public.ecr.aws")}}
 [[settings.container-registry.credentials]]
-registry = "public.ecr.aws"
-username = "{{.RegistryMirrorUsername}}"
-password = "{{.RegistryMirrorPassword}}"
+registry = "{{ $orig }}"
+username = "{{$.RegistryMirrorUsername}}"
+password = "{{$.RegistryMirrorPassword}}"
+{{- end }}
+{{- end }}
 [[settings.container-registry.credentials]]
 registry = "{{.RegistryMirrorEndpoint}}"
 username = "{{.RegistryMirrorUsername}}"
 password = "{{.RegistryMirrorPassword}}"
 {{- end -}}
 `
+
 	nodeLabelsTemplate = `{{ define "nodeLabelSettings" -}}
 [settings.kubernetes.node-labels]
 {{.NodeLabels}}
@@ -153,7 +161,7 @@ trusted = true
 {{- end -}}
 
 
-{{- if (ne .RegistryMirrorEndpoint "")}}
+{{- if .RegistryMirrorMap}}
 {{template "registryMirrorSettings" .}}
 {{- end -}}
 

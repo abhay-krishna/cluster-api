@@ -564,7 +564,9 @@ func (r *KubeadmConfigReconciler) handleClusterNotInitialized(ctx context.Contex
 		if scope.Config.Spec.ClusterConfiguration.Proxy.HTTPSProxy != "" {
 			bottlerocketConfig.ProxyConfiguration = scope.Config.Spec.ClusterConfiguration.Proxy
 		}
-		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" {
+
+		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" ||
+			len(scope.Config.Spec.ClusterConfiguration.RegistryMirror.Mirrors) != 0 {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.ClusterConfiguration.RegistryMirror
 			registryUsername, registryPassword, err := r.resolveRegistryCredentials(ctx, scope.Config)
 			if err != nil {
@@ -880,7 +882,9 @@ func (r *KubeadmConfigReconciler) joinWorker(ctx context.Context, scope *Scope) 
 		if scope.Config.Spec.JoinConfiguration.Proxy.HTTPSProxy != "" {
 			bottlerocketConfig.ProxyConfiguration = scope.Config.Spec.JoinConfiguration.Proxy
 		}
-		if scope.Config.Spec.JoinConfiguration.RegistryMirror.Endpoint != "" {
+
+		if scope.Config.Spec.JoinConfiguration.RegistryMirror.Endpoint != "" ||
+			len(scope.Config.Spec.JoinConfiguration.RegistryMirror.Mirrors) != 0 {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.JoinConfiguration.RegistryMirror
 			registryUsername, registryPassword, err := r.resolveRegistryCredentials(ctx, scope.Config)
 			if err != nil {
@@ -1079,7 +1083,9 @@ func (r *KubeadmConfigReconciler) joinControlplane(ctx context.Context, scope *S
 		if scope.Config.Spec.JoinConfiguration.Proxy.HTTPSProxy != "" {
 			bottlerocketConfig.ProxyConfiguration = scope.Config.Spec.JoinConfiguration.Proxy
 		}
-		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" {
+
+		if scope.Config.Spec.ClusterConfiguration.RegistryMirror.Endpoint != "" ||
+			len(scope.Config.Spec.ClusterConfiguration.RegistryMirror.Mirrors) != 0 {
 			bottlerocketConfig.RegistryMirrorConfiguration = scope.Config.Spec.ClusterConfiguration.RegistryMirror
 			registryUsername, registryPassword, err := r.resolveRegistryCredentials(ctx, scope.Config)
 			if err != nil {

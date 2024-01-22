@@ -259,6 +259,21 @@ type RegistryMirrorConfiguration struct {
 
 	// CACert defines the CA cert for the registry mirror
 	CACert string `json:"caCert,omitempty"`
+
+	// Mirrors defines a list of image registry mirrors.
+	// +k8s:conversion-gen=false
+	// +optional
+	Mirrors []Mirror `json:"mirrors,omitempty"`
+}
+
+// Mirror holds the settings for mirroring a registry.
+type Mirror struct {
+	// Registry defines the registry we are mirroring to the endpoint.
+	Registry string `json:"registry,omitempty"`
+
+	// Endpoints defines the registry mirror endpoints to use for pulling images.
+	// Currently we support only one private registry. Hence endpoints would have only one entry.
+	Endpoints []string `json:"endpoints,omitempty"`
 }
 
 // ControlPlaneComponent holds settings common to control plane component of the cluster.

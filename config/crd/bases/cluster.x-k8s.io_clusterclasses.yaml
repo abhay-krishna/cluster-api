@@ -1622,6 +1622,7 @@ spec:
                               enum:
                               - RollingUpdate
                               - OnDelete
+                              - InPlace
                               type: string
                           type: object
                         template:

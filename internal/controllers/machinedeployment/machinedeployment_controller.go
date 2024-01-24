@@ -315,6 +315,10 @@ func (r *Reconciler) reconcile(ctx context.Context, s *scope) error {
 		return r.rolloutRolling(ctx, md, s.machineSets, templateExists)
 	}
 
+	if md.Spec.Strategy.Type == clusterv1.InPlaceMachineDeploymentStrategyType {
+		return r.rolloutInPlace(ctx, md, s.machineSets, templateExists)
+	}
+
 	if md.Spec.Strategy.Type == clusterv1.OnDeleteMachineDeploymentStrategyType {
 		return r.rolloutOnDelete(ctx, md, s.machineSets, templateExists)
 	}

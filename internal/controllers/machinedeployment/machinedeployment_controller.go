@@ -278,6 +278,10 @@ func (r *Reconciler) reconcile(ctx context.Context, cluster *clusterv1.Cluster, 
 		return r.rolloutRolling(ctx, md, msList)
 	}
 
+	if md.Spec.Strategy.Type == clusterv1.InPlaceMachineDeploymentStrategyType {
+		return r.rolloutInPlace(ctx, md, msList)
+	}
+
 	if md.Spec.Strategy.Type == clusterv1.OnDeleteMachineDeploymentStrategyType {
 		return r.rolloutOnDelete(ctx, md, msList)
 	}

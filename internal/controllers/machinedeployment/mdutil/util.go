@@ -662,7 +662,7 @@ func NewMSNewReplicas(deployment *clusterv1.MachineDeployment, allMSs []*cluster
 		// Do not exceed the number of desired replicas.
 		scaleUpCount = min(scaleUpCount, *(deployment.Spec.Replicas)-newMSReplicas)
 		return newMSReplicas + scaleUpCount, nil
-	case clusterv1.OnDeleteMachineDeploymentStrategyType:
+	case clusterv1.OnDeleteMachineDeploymentStrategyType, clusterv1.InPlaceMachineDeploymentStrategyType:
 		// Find the total number of machines
 		currentMachineCount := TotalMachineSetsReplicaSum(allMSs)
 		if currentMachineCount >= *(deployment.Spec.Replicas) {
@@ -673,8 +673,6 @@ func NewMSNewReplicas(deployment *clusterv1.MachineDeployment, allMSs []*cluster
 		// the desired number of replicas in the MachineDeployment
 		scaleUpCount := *(deployment.Spec.Replicas) - currentMachineCount
 		return newMSReplicas + scaleUpCount, nil
-	case clusterv1.InPlaceMachineDeploymentStrategyType:
-		return 0, nil
 	default:
 		return 0, fmt.Errorf("failed to compute replicas: deployment strategy %v isn't supported", deployment.Spec.Strategy.Type)
 	}

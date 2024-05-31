@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
 	bootstraputil "k8s.io/cluster-bootstrap/token/util"
 )
@@ -213,14 +214,110 @@ type BottlerocketSettings struct {
 // BottlerocketKubernetesSettings holds the settings for kubernetes on bottlerocket nodes.
 // This setting is ONLY for bottlerocket nodes.
 type BottlerocketKubernetesSettings struct {
-	// MaxPods defines the maximum number of pods that can run on a node.
-	MaxPods int `json:"maxPods,omitempty"`
-
 	// AllowedUnsafeSysctls defines the list of unsafe sysctls that can be set on a node.
 	AllowedUnsafeSysctls []string `json:"allowedUnsafeSysctls,omitempty"`
 
 	// ClusterDNSIPs defines IP addresses of the DNS servers.
 	ClusterDNSIPs []string `json:"clusterDNSIPs,omitempty"`
+
+	// ClusterDomain defines the DNS domain for the cluster, allowing all Kubernetes-run containers
+	// to search this domain before the host’s search domains
+	ClusterDomain string `json:"clusterDomain,omitempty"`
+
+	// ContainerLogMaxFiles specifies the maximum number of container log
+	// files that can be present for a container
+	ContainerLogMaxFiles int `json:"containerLogMaxFiles,omitempty"`
+
+	// ContainerLogMaxSize is a quantity defining the maximum size of
+	// the container log file before it is rotated
+	ContainerLogMaxSize string `json:"containerLogMaxSize,omitempty"`
+
+	// CPUCFSQuota enables CPU CFS quota enforcement for containers that specify CPU limits
+	CPUCFSQuota *bool `json:"cpuCFSQuota,omitempty"`
+
+	// CPUManagerPolicy is the name of the policy to use.
+	CPUManagerPolicy string `json:"cpuManagerPolicy,omitempty"`
+
+	// CPUManagerPolicyOptions is a set of key=value which allows to set extra options to
+	// fine tune the behaviour of the cpu manager policies
+	CPUManagerPolicyOptions map[string]string `json:"cpuManagerPolicyOptions,omitempty"`
+
+	// CPUManagerReconcilePeriod is the reconciliation period for the CPU Manager.
+	CPUManagerReconcilePeriod *v1.Duration `json:"cpuManagerReconcilePeriod,omitempty"`
+
+	// EventBurst is the maximum size of a burst of event creations.
+	EventBurst int `json:"eventBurst,omitempty"`
+
+	// EventRecordQPS is the maximum event creations per second.
+	EventRecordQPS int `json:"eventRecordQPS,omitempty"`
+
+	// EvictionHard is a map of signal names to quantities that defines hard eviction thresholds.
+	EvictionHard map[string]string `json:"evictionHard,omitempty"`
+
+	// EvictionMaxPodGracePeriod is the maximum allowed grace period (in seconds) to use
+	// when terminating pods in response to a soft eviction threshold being met.
+	EvictionMaxPodGracePeriod int `json:"evictionMaxPodGracePeriod,omitempty"`
+
+	// EvictionSoft is a map of signal names to quantities that defines soft eviction thresholds.
+	EvictionSoft map[string]string `json:"evictionSoft,omitempty"`
+
+	// EvictionSoftGracePeriod is a map of signal names to quantities that defines grace periods
+	// for each soft eviction signal.
+	EvictionSoftGracePeriod map[string]string `json:"evictionSoftGracePeriod,omitempty"`
+
+	// ImageGCHighThresholdPercent is the percent of disk usage after which image garbage
+	// collection is always run.
+	ImageGCHighThresholdPercent int `json:"imageGCHighThresholdPercent,omitempty"`
+
+	// ImageGCLowThresholdPercent is the percent of disk usage before which image garbage collection is never run.
+	ImageGCLowThresholdPercent int `json:"imageGCLowThresholdPercent,omitempty"`
+
+	// KubeAPIBurst  is the burst to allow while talking with kubernetes API server.
+	KubeAPIBurst int `json:"kubeAPIBurst,omitempty"`
+
+	// KubeAPIQPS is the QPS to use while talking with kubernetes apiserver.
+	KubeAPIQPS int `json:"kubeAPIQPS,omitempty"`
+
+	// KubeReserved is a set of ResourceName=ResourceQuantity pairs that describe resources
+	// reserved for kubernetes system components
+	KubeReserved map[string]string `json:"kubeReserved,omitempty"`
+
+	// MaxPods defines the maximum number of pods that can run on a node.
+	MaxPods int `json:"maxPods,omitempty"`
+
+	// MemoryManagerPolicy is the name of the policy to use by memory manager.
+	MemoryManagerPolicy string `json:"memoryManagerPolicy,omitempty"`
+
+	// PodPidsLimit is the maximum number of PIDs in any pod.
+	PodPidsLimit int64 `json:"podPidsLimit,omitempty"`
+
+	// ProviderID sets the unique ID of the instance that an external provider.
+	ProviderID string `json:"providerID,omitempty"`
+
+	// RegistryBurst is the maximum size of bursty pulls.
+	RegistryBurst int `json:"registryBurst,omitempty"`
+
+	// RegistryPullQPS is the limit of registry pulls per second.
+	RegistryPullQPS int `json:"registryPullQPS,omitempty"`
+
+	// ShutdownGracePeriod specifies the total duration that the node should delay
+	// the shutdown and total grace period for pod termination during a node shutdown.
+	ShutdownGracePeriod *v1.Duration `json:"shutdownGracePeriod,omitempty"`
+
+	// ShutdownGracePeriodCriticalPods specifies the duration used to terminate
+	// critical pods during a node shutdown.
+	ShutdownGracePeriodCriticalPods *v1.Duration `json:"shutdownGracePeriodCriticalPods,omitempty"`
+
+	// SystemReserved is a set of ResourceName=ResourceQuantity pairs that describe
+	// resources reserved for non-kubernetes components.
+	SystemReserved map[string]string `json:"systemReserved,omitempty"`
+
+	// TopologyManagerPolicy is the name of the topology manager policy to use.
+	TopologyManagerPolicy string `json:"topologyManagerPolicy,omitempty"`
+
+	// TopologyManagerScope represents the scope of topology hint generation
+	// that topology manager requests and hint providers generate.
+	TopologyManagerScope string `json:"topologyManagerScope,omitempty"`
 }
 
 // BottlerocketKernelSettings holds the kernel settings for bottlerocket nodes

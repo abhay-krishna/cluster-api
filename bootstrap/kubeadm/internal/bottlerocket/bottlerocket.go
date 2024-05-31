@@ -42,29 +42,56 @@ type BottlerocketConfig struct {
 	RegistryMirrorCredentials
 }
 
-// BottlerocketSettingsInput is the input for the Bottlerocket settings template.
-type BottlerocketSettingsInput struct {
-	PauseContainerSource   string
-	HTTPSProxyEndpoint     string
-	NoProxyEndpoints       []string
-	RegistryMirrorEndpoint string
-	RegistryMirrorCACert   string
-	RegistryMirrorUsername string
-	RegistryMirrorPassword string
-	NodeLabels             string
-	NTPServers             []string
-	Taints                 string
-	ProviderID             string
-	Hostname               string
-	AllowedUnsafeSysctls   []string
-	ClusterDNSIPs          []string
-	MaxPods                int
-	BootKernel             string
-	HostContainers         []bootstrapv1.BottlerocketHostContainer
-	BootstrapContainers    []bootstrapv1.BottlerocketBootstrapContainer
-	SysctlSettings         string
-	CertBundles            []bootstrapv1.CertBundle
-	RegistryMirrorMap      map[string][]string
+// SettingsInput is the input for the Bottlerocket settings template.
+type SettingsInput struct {
+	PauseContainerSource            string
+	HTTPSProxyEndpoint              string
+	NoProxyEndpoints                []string
+	RegistryMirrorEndpoint          string
+	RegistryMirrorCACert            string
+	RegistryMirrorUsername          string
+	RegistryMirrorPassword          string
+	NodeLabels                      string
+	NTPServers                      []string
+	Taints                          string
+	ProviderID                      string
+	Hostname                        string
+	AllowedUnsafeSysctls            []string
+	ClusterDNSIPs                   []string
+	MaxPods                         int
+	BootKernel                      string
+	HostContainers                  []bootstrapv1.BottlerocketHostContainer
+	BootstrapContainers             []bootstrapv1.BottlerocketBootstrapContainer
+	SysctlSettings                  string
+	CertBundles                     []bootstrapv1.CertBundle
+	RegistryMirrorMap               map[string][]string
+	ClusterDomain                   string
+	ContainerLogMaxFiles            int
+	ContainerLogMaxSize             string
+	CPUCFSQuota                     *bool
+	CPUManagerPolicy                string
+	CPUManagerPolicyOptions         map[string]string
+	CPUManagerReconcilePeriod       string
+	EventBurst                      int
+	EventRecordQPS                  int
+	EvictionHard                    map[string]string
+	EvictionMaxPodGracePeriod       int
+	EvictionSoft                    map[string]string
+	EvictionSoftGracePeriod         map[string]string
+	ImageGCHighThresholdPercent     int
+	ImageGCLowThresholdPercent      int
+	KubeAPIBurst                    int
+	KubeAPIQPS                      int
+	KubeReserved                    map[string]string
+	MemoryManagerPolicy             string
+	PodPidsLimit                    int64
+	RegistryBurst                   int
+	RegistryPullQPS                 int
+	ShutdownGracePeriod             string
+	ShutdownGracePeriodCriticalPods string
+	SystemReserved                  map[string]string
+	TopologyManagerPolicy           string
+	TopologyManagerScope            string
 }
 
 // HostPath holds the path and type of a host path volume.
@@ -140,6 +167,21 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	}
 	if _, err := tm.Parse(kubernetesInitTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse kubernetes %s template", kind)
+	}
+	if _, err := tm.Parse(evictionHardTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse evictionHardSettings %s template", kind)
+	}
+	if _, err := tm.Parse(evictionSoftTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse evictionSoftSettings %s template", kind)
+	}
+	if _, err := tm.Parse(evictionSoftGracePeriodTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse evictionSoftGracePeriodSettings %s template", kind)
+	}
+	if _, err := tm.Parse(kubeReservedTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse kubeReservedSettings %s template", kind)
+	}
+	if _, err := tm.Parse(systemReservedTemplate); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse systemReservedSettings %s template", kind)
 	}
 	if _, err := tm.Parse(networkInitTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse networks %s template", kind)
@@ -228,7 +270,7 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		hostContainers = append(hostContainers, config.BottlerocketCustomHostContainers...)
 	}
 
-	bottlerocketInput := &BottlerocketSettingsInput{
+	bottlerocketInput := &SettingsInput{
 		PauseContainerSource: fmt.Sprintf("%s:%s", config.Pause.ImageRepository, config.Pause.ImageTag),
 		HTTPSProxyEndpoint:   config.ProxyConfiguration.HTTPSProxy,
 		NodeLabels:           parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
@@ -283,14 +325,50 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 	}
 	if config.BottlerocketSettings != nil {
 		if config.BottlerocketSettings.Kubernetes != nil {
-			bottlerocketInput.MaxPods = config.BottlerocketSettings.Kubernetes.MaxPods
 			for _, sysctl := range config.BottlerocketSettings.Kubernetes.AllowedUnsafeSysctls {
 				bottlerocketInput.AllowedUnsafeSysctls = append(bottlerocketInput.AllowedUnsafeSysctls, strconv.Quote(sysctl))
 			}
 			for _, ip := range config.BottlerocketSettings.Kubernetes.ClusterDNSIPs {
 				bottlerocketInput.ClusterDNSIPs = append(bottlerocketInput.ClusterDNSIPs, strconv.Quote(ip))
 			}
+			bottlerocketInput.ClusterDomain = config.BottlerocketSettings.Kubernetes.ClusterDomain
+			bottlerocketInput.ContainerLogMaxFiles = config.BottlerocketSettings.Kubernetes.ContainerLogMaxFiles
+			bottlerocketInput.ContainerLogMaxSize = config.BottlerocketSettings.Kubernetes.ContainerLogMaxSize
+			if config.BottlerocketSettings.Kubernetes.CPUCFSQuota != nil {
+				bottlerocketInput.CPUCFSQuota = config.BottlerocketSettings.Kubernetes.CPUCFSQuota
+			}
+			bottlerocketInput.CPUManagerPolicy = config.BottlerocketSettings.Kubernetes.CPUManagerPolicy
+			bottlerocketInput.CPUManagerPolicyOptions = config.BottlerocketSettings.Kubernetes.CPUManagerPolicyOptions
+			if config.BottlerocketSettings.Kubernetes.CPUManagerReconcilePeriod != nil {
+				bottlerocketInput.CPUManagerReconcilePeriod = config.BottlerocketSettings.Kubernetes.CPUManagerReconcilePeriod.Duration.String()
+			}
+			bottlerocketInput.EventBurst = config.BottlerocketSettings.Kubernetes.EventBurst
+			bottlerocketInput.EventRecordQPS = config.BottlerocketSettings.Kubernetes.EventRecordQPS
+			bottlerocketInput.EvictionHard = config.BottlerocketSettings.Kubernetes.EvictionHard
+			bottlerocketInput.EvictionMaxPodGracePeriod = config.BottlerocketSettings.Kubernetes.EvictionMaxPodGracePeriod
+			bottlerocketInput.EvictionSoft = config.BottlerocketSettings.Kubernetes.EvictionSoft
+			bottlerocketInput.EvictionSoftGracePeriod = config.BottlerocketSettings.Kubernetes.EvictionSoftGracePeriod
+			bottlerocketInput.ImageGCHighThresholdPercent = config.BottlerocketSettings.Kubernetes.ImageGCHighThresholdPercent
+			bottlerocketInput.ImageGCLowThresholdPercent = config.BottlerocketSettings.Kubernetes.ImageGCLowThresholdPercent
+			bottlerocketInput.KubeAPIBurst = config.BottlerocketSettings.Kubernetes.KubeAPIBurst
+			bottlerocketInput.KubeAPIQPS = config.BottlerocketSettings.Kubernetes.KubeAPIQPS
+			bottlerocketInput.KubeReserved = config.BottlerocketSettings.Kubernetes.KubeReserved
+			bottlerocketInput.MaxPods = config.BottlerocketSettings.Kubernetes.MaxPods
+			bottlerocketInput.MemoryManagerPolicy = config.BottlerocketSettings.Kubernetes.MemoryManagerPolicy
+			bottlerocketInput.PodPidsLimit = config.BottlerocketSettings.Kubernetes.PodPidsLimit
+			bottlerocketInput.RegistryBurst = config.BottlerocketSettings.Kubernetes.RegistryBurst
+			bottlerocketInput.RegistryPullQPS = config.BottlerocketSettings.Kubernetes.RegistryPullQPS
+			if config.BottlerocketSettings.Kubernetes.ShutdownGracePeriod != nil {
+				bottlerocketInput.ShutdownGracePeriod = config.BottlerocketSettings.Kubernetes.ShutdownGracePeriod.Duration.String()
+			}
+			if config.BottlerocketSettings.Kubernetes.ShutdownGracePeriodCriticalPods != nil {
+				bottlerocketInput.ShutdownGracePeriodCriticalPods = config.BottlerocketSettings.Kubernetes.ShutdownGracePeriodCriticalPods.Duration.String()
+			}
+			bottlerocketInput.SystemReserved = config.BottlerocketSettings.Kubernetes.SystemReserved
+			bottlerocketInput.TopologyManagerPolicy = config.BottlerocketSettings.Kubernetes.TopologyManagerPolicy
+			bottlerocketInput.TopologyManagerScope = config.BottlerocketSettings.Kubernetes.TopologyManagerScope
 		}
+
 		if config.BottlerocketSettings.Kernel != nil {
 			bottlerocketInput.SysctlSettings = parseSysctlSettings(config.BottlerocketSettings.Kernel.SysctlSettings)
 		}

@@ -1053,22 +1053,6 @@ func schema_sigsk8sio_cluster_api_api_v1beta1_ClusterStatus(ref common.Reference
 							Format:      "int64",
 						},
 					},
-					"managedExternalEtcdInitialized": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ManagedExternalEtcdInitialized indicates that first etcd member's IP address is set by machine controller, so remaining etcd members can lookup the address to join the cluster",
-							Default:     false,
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-						},
-					"managedExternalEtcdReady": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ManagedExternalEtcdReady indicates external etcd cluster is fully provisioned",
-							Default:     false,
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
 					"v1beta2": {
 						SchemaProps: spec.SchemaProps{
 							Description: "v1beta2 groups all the fields that will be added or modified in Cluster's status with the V1Beta2 version.",

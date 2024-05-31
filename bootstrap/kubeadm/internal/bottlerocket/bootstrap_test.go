@@ -2,9 +2,12 @@ package bottlerocket
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/pointer"
 
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 )
@@ -378,6 +381,61 @@ endpoint = ["REGISTRY_ENDPOINT"]
 [settings.pki.registry-mirror-ca]
 data = "UkVHSVNUUllfQ0E="
 trusted=true`
+
+	kubernetesSettingsUserDataCPU = `
+[settings.host-containers.admin]
+enabled = true
+superpowered = true
+source = "ADMIN_REPO:ADMIN_TAG"
+user-data = "CnsKCSJzc2giOiB7CgkJImF1dGhvcml6ZWQta2V5cyI6IFsic3NoLXJzYSBBQUEuLi4iXQoJfQp9"
+[settings.host-containers.kubeadm-bootstrap]
+enabled = true
+superpowered = true
+source = "BOOTSTRAP_REPO:BOOTSTRAP_TAG"
+user-data = "Qk9UVExFUk9DS0VUX0JPT1RTVFJBUF9VU0VSREFUQQ=="
+
+[settings.kubernetes]
+cluster-domain = "cluster.local2"
+standalone-mode = true
+authentication-mode = "tls"
+server-tls-bootstrap = false
+pod-infra-container-image = "PAUSE_REPO:PAUSE_TAG"
+provider-id = "PROVIDERID"
+cpu-cfs-quota-enforced = false
+container-log-max-files = 10
+container-log-max-size = "5Mi"
+cpu-manager-policy = "static"
+cpu-manager-policy-options = ["full-pcpus-only"]
+cpu-manager-reconcile-period = 10s
+event-burst = 200
+event-qps = 100
+eviction-max-pod-grace-period = 10
+image-gc-high-threshold-percent = 26
+image-gc-low-threshold-percent = 19
+kube-api-burst = 80
+memory-manager-policy = "Static"
+pod-pids-limit = 10
+registry-burst = 11
+registry-qps = 1
+shutdown-grace-period = 15s
+shutdown-grace-period-for-critical-pods = 20s
+topology-manager-policy = "restricted"
+topology-manager-scope = "pod"
+[settings.kubernetes.eviction-hard]
+"memory.available" = "15%"
+[settings.kubernetes.eviction-soft]
+"memory.available" = "12%"
+[settings.kubernetes.eviction-soft-grace-period]
+"memory.available" = "30s"
+[settings.kubernetes.kube-reserved]
+cpu = "20m"
+[settings.kubernetes.system-reserved]
+cpu = "10m"
+ephemeral-storage = "1Gi"
+memory = "100Mi"
+
+[settings.network]
+hostname = "hostname"`
 )
 
 var (
@@ -686,11 +744,74 @@ func TestGetBottlerocketNodeUserData(t *testing.T) {
 			},
 			output: registryMirrorMultipleMirrorsUserData,
 		},
+		{
+			name: "with cpu manager policy options",
+			config: &BottlerocketConfig{
+				BottlerocketAdmin:     brAdmin,
+				BottlerocketBootstrap: brBootstrap,
+				Hostname:              hostname,
+				Pause:                 pause,
+				KubeletExtraArgs: map[string]string{
+					"provider-id": "PROVIDERID",
+				},
+				BottlerocketSettings: &bootstrapv1.BottlerocketSettings{
+					Kubernetes: &bootstrapv1.BottlerocketKubernetesSettings{
+						ClusterDomain:        "cluster.local2",
+						ContainerLogMaxFiles: 10,
+						ContainerLogMaxSize:  "5Mi",
+						CPUCFSQuota:          pointer.Bool(false),
+						CPUManagerPolicy:     "static",
+						CPUManagerPolicyOptions: map[string]string{
+							"full-pcpus-only": "true",
+						},
+						CPUManagerReconcilePeriod: &v1.Duration{
+							Duration: 10 * time.Second,
+						},
+						EventBurst:     200,
+						EventRecordQPS: 100,
+						EvictionHard: map[string]string{
+							"memory.available": "15%",
+						},
+						EvictionMaxPodGracePeriod: 10,
+						EvictionSoft: map[string]string{
+							"memory.available": "12%",
+						},
+						EvictionSoftGracePeriod: map[string]string{
+							"memory.available": "30s",
+						},
+						ImageGCHighThresholdPercent: 26,
+						ImageGCLowThresholdPercent:  19,
+						KubeAPIBurst:                80,
+						KubeReserved: map[string]string{
+							"cpu": "20m",
+						},
+						MemoryManagerPolicy: "Static",
+						PodPidsLimit:        10,
+						RegistryBurst:       11,
+						RegistryPullQPS:     1,
+						ShutdownGracePeriod: &v1.Duration{
+							Duration: 15 * time.Second,
+						},
+						ShutdownGracePeriodCriticalPods: &v1.Duration{
+							Duration: 20 * time.Second,
+						},
+						SystemReserved: map[string]string{
+							"cpu":               "10m",
+							"ephemeral-storage": "1Gi",
+							"memory":            "100Mi",
+						},
+						TopologyManagerPolicy: "restricted",
+						TopologyManagerScope:  "pod",
+					},
+				},
+			},
+			output: kubernetesSettingsUserDataCPU,
+		},
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			b, err := getBottlerocketNodeUserData(brBootstrapUserdata, users, testcase.config)
-			println(string(b))
+
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(string(b)).To(Equal(testcase.output))
 		})

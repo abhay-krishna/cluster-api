@@ -856,7 +856,7 @@ func Convert_v1beta1_BottlerocketKernelSettings_To_v1alpha4_BottlerocketKernelSe
 }
 
 func autoConvert_v1alpha4_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings(in *BottlerocketKubernetesSettings, out *v1beta1.BottlerocketKubernetesSettings, s conversion.Scope) error {
-	out.MaxPods = in.MaxPods
+	// WARNING: in.MaxPods requires manual conversion: inconvertible types (int vs *int)
 	out.AllowedUnsafeSysctls = *(*[]string)(unsafe.Pointer(&in.AllowedUnsafeSysctls))
 	out.ClusterDNSIPs = *(*[]string)(unsafe.Pointer(&in.ClusterDNSIPs))
 	return nil
@@ -888,10 +888,9 @@ func autoConvert_v1beta1_BottlerocketKubernetesSettings_To_v1alpha4_Bottlerocket
 	// WARNING: in.KubeAPIBurst requires manual conversion: does not exist in peer-type
 	// WARNING: in.KubeAPIQPS requires manual conversion: does not exist in peer-type
 	// WARNING: in.KubeReserved requires manual conversion: does not exist in peer-type
-	out.MaxPods = in.MaxPods
+	// WARNING: in.MaxPods requires manual conversion: inconvertible types (*int vs int)
 	// WARNING: in.MemoryManagerPolicy requires manual conversion: does not exist in peer-type
 	// WARNING: in.PodPidsLimit requires manual conversion: does not exist in peer-type
-	// WARNING: in.ProviderID requires manual conversion: does not exist in peer-type
 	// WARNING: in.RegistryBurst requires manual conversion: does not exist in peer-type
 	// WARNING: in.RegistryPullQPS requires manual conversion: does not exist in peer-type
 	// WARNING: in.ShutdownGracePeriod requires manual conversion: does not exist in peer-type

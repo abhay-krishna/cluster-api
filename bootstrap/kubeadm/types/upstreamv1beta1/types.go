@@ -193,7 +193,7 @@ type BottlerocketSettings struct {
 // This setting is ONLY for bottlerocket nodes.
 type BottlerocketKubernetesSettings struct {
 	// MaxPods defines the maximum number of pods that can run on a node.
-	MaxPods int `json:"maxPods,omitempty"`
+	MaxPods *int `json:"maxPods,omitempty"`
 
 	// AllowedUnsafeSysctls defines the list of unsafe sysctls that can be set on a node.
 	AllowedUnsafeSysctls []string `json:"allowedUnsafeSysctls,omitempty"`

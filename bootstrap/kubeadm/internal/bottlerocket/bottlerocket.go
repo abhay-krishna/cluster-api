@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
@@ -44,54 +45,95 @@ type BottlerocketConfig struct {
 
 // SettingsInput is the input for the Bottlerocket settings template.
 type SettingsInput struct {
-	PauseContainerSource            string
-	HTTPSProxyEndpoint              string
-	NoProxyEndpoints                []string
-	RegistryMirrorEndpoint          string
-	RegistryMirrorCACert            string
-	RegistryMirrorUsername          string
-	RegistryMirrorPassword          string
-	NodeLabels                      string
-	NTPServers                      []string
-	Taints                          string
-	ProviderID                      string
-	Hostname                        string
-	AllowedUnsafeSysctls            []string
-	ClusterDNSIPs                   []string
-	MaxPods                         int
-	BootKernel                      string
-	HostContainers                  []bootstrapv1.BottlerocketHostContainer
-	BootstrapContainers             []bootstrapv1.BottlerocketBootstrapContainer
-	SysctlSettings                  string
-	CertBundles                     []bootstrapv1.CertBundle
-	RegistryMirrorMap               map[string][]string
-	ClusterDomain                   string
-	ContainerLogMaxFiles            int
-	ContainerLogMaxSize             string
-	CPUCFSQuota                     *bool
-	CPUManagerPolicy                string
-	CPUManagerPolicyOptions         map[string]string
-	CPUManagerReconcilePeriod       string
-	EventBurst                      int
-	EventRecordQPS                  int
-	EvictionHard                    map[string]string
-	EvictionMaxPodGracePeriod       int
-	EvictionSoft                    map[string]string
-	EvictionSoftGracePeriod         map[string]string
-	ImageGCHighThresholdPercent     int
-	ImageGCLowThresholdPercent      int
-	KubeAPIBurst                    int
-	KubeAPIQPS                      int
-	KubeReserved                    map[string]string
-	MemoryManagerPolicy             string
-	PodPidsLimit                    int64
-	RegistryBurst                   int
-	RegistryPullQPS                 int
-	ShutdownGracePeriod             string
-	ShutdownGracePeriodCriticalPods string
-	SystemReserved                  map[string]string
-	TopologyManagerPolicy           string
-	TopologyManagerScope            string
+	NetworkSettings NetworkSettings    `toml:"network,omitempty"`
+	Kubernetes      KubernetesSettings `toml:"kubernetes,omitempty"`
+	Kernel          KernelSettings     `toml:"kernel,omitempty"`
+	Boot            BootSettings       `toml:"boot,omitempty"`
+
+	PauseContainerSource   string
+	RegistryMirrorEndpoint string
+	RegistryMirrorCACert   string
+	RegistryMirrorUsername string
+	RegistryMirrorPassword string
+	NodeLabels             string
+	NTPServers             []string
+	Taints                 string
+	HostContainers         []bootstrapv1.BottlerocketHostContainer
+	BootstrapContainers    []bootstrapv1.BottlerocketBootstrapContainer
+	CertBundles            []bootstrapv1.CertBundle
+	RegistryMirrorMap      map[string][]string
+}
+
+// InitSettingsInput is the high level settings struct for the toml we are generating.
+type InitSettingsInput struct {
+	InitSettings *InitSettings `toml:"settings,omitempty"`
+}
+
+// InitSettings has all the other settings defined in the structure that Bottlerocket
+// expects settings toml to be in.
+type InitSettings struct {
+	Kubernetes      *KubernetesSettings `toml:"kubernetes,omitempty"`
+	Kernel          *KernelSettings     `toml:"kernel,omitempty"`
+	Boot            *BootSettings       `toml:"boot,omitempty"`
+	NetworkSettings *NetworkSettings    `toml:"network,omitempty"`
+}
+
+// NetworkSettings exposes and sets the settings for Network field under Settings.
+type NetworkSettings struct {
+	Hostname           string   `toml:"hostname,omitempty"`
+	HTTPSProxyEndpoint string   `toml:"https-proxy,omitempty"`
+	NoProxyEndpoints   []string `toml:"no-proxy,omitempty"`
+}
+
+// KernelSettings exposes and sets the settings for Kernel field under Settings.
+type KernelSettings struct {
+	SysctlSettings map[string]string `toml:"sysctl,omitempty"`
+}
+
+// BootSettings exposes and sets the settings for Boot field under Settings.
+type BootSettings struct {
+	RebootToReconcile bool                `toml:"reboot-to-reconcile,omitempty"`
+	BootKernel        map[string][]string `toml:"kernel-parameters,omitempty"`
+}
+
+// KubernetesSettings exposes and sets the settings for Kubernetes field under Settings.
+type KubernetesSettings struct {
+	AllowedUnsafeSysctls            []string `toml:"allowed-unsafe-sysctls,omitempty"`
+	AuthenticationMode              string   `toml:"authentication-mode,omitempty"`
+	ClusterDNSIPs                   []string `toml:"cluster-dns-ip,omitempty"`
+	ClusterDomain                   string   `toml:"cluster-domain,omitempty"`
+	ContainerLogMaxFiles            *int     `toml:"container-log-max-files,omitempty"`
+	ContainerLogMaxSize             string   `toml:"container-log-max-size,omitempty"`
+	CPUCFSQuota                     *bool    `toml:"cpu-cfs-quota-enforced,omitempty"`
+	CPUManagerPolicy                string   `toml:"cpu-manager-policy,omitempty"`
+	CPUManagerPolicyOptions         []string `toml:"cpu-manager-policy-options,omitempty"`
+	CPUManagerReconcilePeriod       string   `toml:"cpu-manager-reconcile-period,omitempty"`
+	EventBurst                      *int     `toml:"event-burst,omitempty"`
+	EventRecordQPS                  *int     `toml:"event-qps,omitempty"`
+	EvictionMaxPodGracePeriod       *int     `toml:"eviction-max-pod-grace-period,omitempty"`
+	ImageGCHighThresholdPercent     *int     `toml:"image-gc-high-threshold-percent,omitempty"`
+	ImageGCLowThresholdPercent      *int     `toml:"image-gc-low-threshold-percent,omitempty"`
+	KubeAPIBurst                    *int     `toml:"kube-api-burst,omitempty"`
+	KubeAPIQPS                      *int     `toml:"kube-api-qps,omitempty"`
+	MaxPods                         *int     `toml:"max-pods,omitempty"`
+	MemoryManagerPolicy             string   `toml:"memory-manager-policy,omitempty"`
+	PodInfraContainerImage          string   `toml:"pod-infra-container-image"`
+	PodPidsLimit                    *int64   `toml:"pod-pids-limit,omitempty"`
+	ProviderID                      string   `toml:"provider-id,omitempty"`
+	RegistryBurst                   *int     `toml:"registry-burst,omitempty"`
+	RegistryPullQPS                 *int     `toml:"registry-qps,omitempty"`
+	ServerTLSBootstrap              bool     `toml:"server-tls-bootstrap"`
+	ShutdownGracePeriod             string   `toml:"shutdown-grace-period,omitempty"`
+	ShutdownGracePeriodCriticalPods string   `toml:"shutdown-grace-period-for-critical-pods,omitempty"`
+	StandaloneMode                  bool     `toml:"standalone-mode,omitempty"`
+	TopologyManagerPolicy           string   `toml:"topology-manager-policy,omitempty"`
+	TopologyManagerScope            string   `toml:"topology-manager-scope,omitempty"`
+
+	EvictionHard            map[string]string `toml:"eviction-hard,omitempty"`
+	EvictionSoft            map[string]string `toml:"eviction-soft,omitempty"`
+	EvictionSoftGracePeriod map[string]string `toml:"eviction-soft-grace-period,omitempty"`
+	KubeReserved            map[string]string `toml:"kube-reserved,omitempty"`
+	SystemReserved          map[string]string `toml:"system-reserved,omitempty"`
 }
 
 // HostPath holds the path and type of a host path volume.
@@ -165,27 +207,6 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	if _, err := tm.Parse(bootstrapContainerSliceTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse bootstrapContainerSettingsSlice %s template", kind)
 	}
-	if _, err := tm.Parse(kubernetesInitTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse kubernetes %s template", kind)
-	}
-	if _, err := tm.Parse(evictionHardTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse evictionHardSettings %s template", kind)
-	}
-	if _, err := tm.Parse(evictionSoftTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse evictionSoftSettings %s template", kind)
-	}
-	if _, err := tm.Parse(evictionSoftGracePeriodTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse evictionSoftGracePeriodSettings %s template", kind)
-	}
-	if _, err := tm.Parse(kubeReservedTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse kubeReservedSettings %s template", kind)
-	}
-	if _, err := tm.Parse(systemReservedTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse systemReservedSettings %s template", kind)
-	}
-	if _, err := tm.Parse(networkInitTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse networks %s template", kind)
-	}
 	if _, err := tm.Parse(registryMirrorTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse registry mirror %s template", kind)
 	}
@@ -203,12 +224,6 @@ func generateNodeUserData(kind string, tpl string, data interface{}) ([]byte, er
 	}
 	if _, err := tm.Parse(ntpTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse NTP %s template", kind)
-	}
-	if _, err := tm.Parse(sysctlSettingsTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse sysctl settings %s template", kind)
-	}
-	if _, err := tm.Parse(bootSettingsTemplate); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse boot settings %s template", kind)
 	}
 	if _, err := tm.Parse(certsTemplate); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse certs %s template", kind)
@@ -272,19 +287,10 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 
 	bottlerocketInput := &SettingsInput{
 		PauseContainerSource: fmt.Sprintf("%s:%s", config.Pause.ImageRepository, config.Pause.ImageTag),
-		HTTPSProxyEndpoint:   config.ProxyConfiguration.HTTPSProxy,
 		NodeLabels:           parseNodeLabels(config.KubeletExtraArgs["node-labels"]), // empty string if it does not exist
 		Taints:               parseTaints(config.Taints),                              // empty string if it does not exist
-		ProviderID:           config.KubeletExtraArgs["provider-id"],
-		Hostname:             config.Hostname,
 		HostContainers:       hostContainers,
 		BootstrapContainers:  config.BottlerocketCustomBootstrapContainers,
-	}
-
-	if len(config.ProxyConfiguration.NoProxy) > 0 {
-		for _, noProxy := range config.ProxyConfiguration.NoProxy {
-			bottlerocketInput.NoProxyEndpoints = append(bottlerocketInput.NoProxyEndpoints, strconv.Quote(noProxy))
-		}
 	}
 
 	// When RegistryMirrorConfiguration.Endpoint is specified, we default the mirror to public.ecr.aws.
@@ -323,61 +329,7 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 			bottlerocketInput.NTPServers = append(bottlerocketInput.NTPServers, strconv.Quote(ntp))
 		}
 	}
-	if config.BottlerocketSettings != nil {
-		if config.BottlerocketSettings.Kubernetes != nil {
-			for _, sysctl := range config.BottlerocketSettings.Kubernetes.AllowedUnsafeSysctls {
-				bottlerocketInput.AllowedUnsafeSysctls = append(bottlerocketInput.AllowedUnsafeSysctls, strconv.Quote(sysctl))
-			}
-			for _, ip := range config.BottlerocketSettings.Kubernetes.ClusterDNSIPs {
-				bottlerocketInput.ClusterDNSIPs = append(bottlerocketInput.ClusterDNSIPs, strconv.Quote(ip))
-			}
-			bottlerocketInput.ClusterDomain = config.BottlerocketSettings.Kubernetes.ClusterDomain
-			bottlerocketInput.ContainerLogMaxFiles = config.BottlerocketSettings.Kubernetes.ContainerLogMaxFiles
-			bottlerocketInput.ContainerLogMaxSize = config.BottlerocketSettings.Kubernetes.ContainerLogMaxSize
-			if config.BottlerocketSettings.Kubernetes.CPUCFSQuota != nil {
-				bottlerocketInput.CPUCFSQuota = config.BottlerocketSettings.Kubernetes.CPUCFSQuota
-			}
-			bottlerocketInput.CPUManagerPolicy = config.BottlerocketSettings.Kubernetes.CPUManagerPolicy
-			bottlerocketInput.CPUManagerPolicyOptions = config.BottlerocketSettings.Kubernetes.CPUManagerPolicyOptions
-			if config.BottlerocketSettings.Kubernetes.CPUManagerReconcilePeriod != nil {
-				bottlerocketInput.CPUManagerReconcilePeriod = config.BottlerocketSettings.Kubernetes.CPUManagerReconcilePeriod.Duration.String()
-			}
-			bottlerocketInput.EventBurst = config.BottlerocketSettings.Kubernetes.EventBurst
-			bottlerocketInput.EventRecordQPS = config.BottlerocketSettings.Kubernetes.EventRecordQPS
-			bottlerocketInput.EvictionHard = config.BottlerocketSettings.Kubernetes.EvictionHard
-			bottlerocketInput.EvictionMaxPodGracePeriod = config.BottlerocketSettings.Kubernetes.EvictionMaxPodGracePeriod
-			bottlerocketInput.EvictionSoft = config.BottlerocketSettings.Kubernetes.EvictionSoft
-			bottlerocketInput.EvictionSoftGracePeriod = config.BottlerocketSettings.Kubernetes.EvictionSoftGracePeriod
-			bottlerocketInput.ImageGCHighThresholdPercent = config.BottlerocketSettings.Kubernetes.ImageGCHighThresholdPercent
-			bottlerocketInput.ImageGCLowThresholdPercent = config.BottlerocketSettings.Kubernetes.ImageGCLowThresholdPercent
-			bottlerocketInput.KubeAPIBurst = config.BottlerocketSettings.Kubernetes.KubeAPIBurst
-			bottlerocketInput.KubeAPIQPS = config.BottlerocketSettings.Kubernetes.KubeAPIQPS
-			bottlerocketInput.KubeReserved = config.BottlerocketSettings.Kubernetes.KubeReserved
-			bottlerocketInput.MaxPods = config.BottlerocketSettings.Kubernetes.MaxPods
-			bottlerocketInput.MemoryManagerPolicy = config.BottlerocketSettings.Kubernetes.MemoryManagerPolicy
-			bottlerocketInput.PodPidsLimit = config.BottlerocketSettings.Kubernetes.PodPidsLimit
-			bottlerocketInput.RegistryBurst = config.BottlerocketSettings.Kubernetes.RegistryBurst
-			bottlerocketInput.RegistryPullQPS = config.BottlerocketSettings.Kubernetes.RegistryPullQPS
-			if config.BottlerocketSettings.Kubernetes.ShutdownGracePeriod != nil {
-				bottlerocketInput.ShutdownGracePeriod = config.BottlerocketSettings.Kubernetes.ShutdownGracePeriod.Duration.String()
-			}
-			if config.BottlerocketSettings.Kubernetes.ShutdownGracePeriodCriticalPods != nil {
-				bottlerocketInput.ShutdownGracePeriodCriticalPods = config.BottlerocketSettings.Kubernetes.ShutdownGracePeriodCriticalPods.Duration.String()
-			}
-			bottlerocketInput.SystemReserved = config.BottlerocketSettings.Kubernetes.SystemReserved
-			bottlerocketInput.TopologyManagerPolicy = config.BottlerocketSettings.Kubernetes.TopologyManagerPolicy
-			bottlerocketInput.TopologyManagerScope = config.BottlerocketSettings.Kubernetes.TopologyManagerScope
-		}
 
-		if config.BottlerocketSettings.Kernel != nil {
-			bottlerocketInput.SysctlSettings = parseSysctlSettings(config.BottlerocketSettings.Kernel.SysctlSettings)
-		}
-
-		if config.BottlerocketSettings.Boot != nil {
-			bottlerocketInput.BootKernel = parseBootSettings(config.BottlerocketSettings.Boot.BootKernelParameters)
-		}
-
-	}
 	if config.CertBundle != nil {
 		for _, cert := range config.CertBundle {
 			cert.Data = base64.StdEncoding.EncodeToString([]byte(cert.Data))
@@ -385,7 +337,151 @@ func getBottlerocketNodeUserData(bootstrapContainerUserData []byte, users []boot
 		}
 	}
 
-	return generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)
+	nodeUserData, err := generateNodeUserData("InitBottlerocketNode", bottlerocketNodeInitSettingsTemplate, bottlerocketInput)
+	if err != nil {
+		return nil, err
+	}
+
+	settings := InitSettingsInput{}
+	initSettings := &InitSettings{}
+
+	nwSettings, err := getNetworkSettings(config)
+	if err != nil {
+		return nil, err
+	}
+	initSettings.NetworkSettings = nwSettings
+
+	kubernetesSettings, err := getKubernetesSettings(config, bottlerocketInput)
+	if err != nil {
+		return nil, err
+	}
+	initSettings.Kubernetes = kubernetesSettings
+
+	if config.BottlerocketSettings != nil {
+		kernelSettings := getKernelSettings(config)
+		if kernelSettings != nil {
+			initSettings.Kernel = kernelSettings
+		}
+
+		bootSettings := getBootSettings(config)
+		if bootSettings != nil {
+			initSettings.Boot = bootSettings
+		}
+	}
+
+	settings.InitSettings = initSettings
+
+	settingsTOML, err := toml.Marshal(settings)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to marshal toml data for %v", settings)
+	}
+
+	settingsTOML = append(settingsTOML, nodeUserData...)
+
+	return settingsTOML, nil
+}
+
+func getKernelSettings(config *BottlerocketConfig) *KernelSettings {
+	if config.BottlerocketSettings.Kernel == nil {
+		return nil
+	}
+
+	bottlerocketKernelSettings := &KernelSettings{
+		SysctlSettings: config.BottlerocketSettings.Kernel.SysctlSettings,
+	}
+
+	return bottlerocketKernelSettings
+}
+
+func getBootSettings(config *BottlerocketConfig) *BootSettings {
+	if config.BottlerocketSettings.Boot == nil {
+		return nil
+	}
+	bottlerocketBootSettings := &BootSettings{
+		RebootToReconcile: true,
+		BootKernel:        config.BottlerocketSettings.Boot.BootKernelParameters,
+	}
+
+	return bottlerocketBootSettings
+}
+
+func getNetworkSettings(config *BottlerocketConfig) (*NetworkSettings, error) {
+	networkSettings := &NetworkSettings{
+		Hostname:           config.Hostname,
+		HTTPSProxyEndpoint: config.ProxyConfiguration.HTTPSProxy,
+	}
+	if len(config.ProxyConfiguration.NoProxy) > 0 {
+		networkSettings.NoProxyEndpoints = append(networkSettings.NoProxyEndpoints, config.ProxyConfiguration.NoProxy...)
+	}
+
+	return networkSettings, nil
+}
+
+func getKubernetesSettings(config *BottlerocketConfig, settingsInput *SettingsInput) (*KubernetesSettings, error) {
+	kubernetesSettings := &KubernetesSettings{
+		AuthenticationMode:     "tls",
+		ClusterDomain:          "cluster.local",
+		PodInfraContainerImage: settingsInput.PauseContainerSource,
+		ProviderID:             config.KubeletExtraArgs["provider-id"],
+		ServerTLSBootstrap:     false,
+		StandaloneMode:         true,
+	}
+
+	if config.BottlerocketSettings != nil {
+		if config.BottlerocketSettings.Kubernetes != nil {
+			kubernetesSettings.AllowedUnsafeSysctls = append(kubernetesSettings.AllowedUnsafeSysctls, config.BottlerocketSettings.Kubernetes.AllowedUnsafeSysctls...)
+			kubernetesSettings.ClusterDNSIPs = append(kubernetesSettings.ClusterDNSIPs, config.BottlerocketSettings.Kubernetes.ClusterDNSIPs...)
+			if config.BottlerocketSettings.Kubernetes.ClusterDomain != "" {
+				kubernetesSettings.ClusterDomain = config.BottlerocketSettings.Kubernetes.ClusterDomain
+			}
+			kubernetesSettings.ContainerLogMaxFiles = config.BottlerocketSettings.Kubernetes.ContainerLogMaxFiles
+			kubernetesSettings.ContainerLogMaxSize = config.BottlerocketSettings.Kubernetes.ContainerLogMaxSize
+			if config.BottlerocketSettings.Kubernetes.CPUCFSQuota != nil {
+				kubernetesSettings.CPUCFSQuota = config.BottlerocketSettings.Kubernetes.CPUCFSQuota
+			}
+			kubernetesSettings.CPUManagerPolicy = config.BottlerocketSettings.Kubernetes.CPUManagerPolicy
+			cpuManagerOptions := config.BottlerocketSettings.Kubernetes.CPUManagerPolicyOptions
+			if cpuManagerOptions != nil {
+				kubernetesSettings.CPUManagerPolicyOptions = []string{}
+				for key, val := range cpuManagerOptions {
+					if val == "true" {
+						kubernetesSettings.CPUManagerPolicyOptions = append(kubernetesSettings.CPUManagerPolicyOptions, key)
+					}
+				}
+			}
+			if config.BottlerocketSettings.Kubernetes.CPUManagerReconcilePeriod != nil {
+				kubernetesSettings.CPUManagerReconcilePeriod = config.BottlerocketSettings.Kubernetes.CPUManagerReconcilePeriod.Duration.String()
+			}
+			kubernetesSettings.EventBurst = config.BottlerocketSettings.Kubernetes.EventBurst
+			kubernetesSettings.EventRecordQPS = config.BottlerocketSettings.Kubernetes.EventRecordQPS
+			kubernetesSettings.EvictionHard = config.BottlerocketSettings.Kubernetes.EvictionHard
+			kubernetesSettings.EvictionMaxPodGracePeriod = config.BottlerocketSettings.Kubernetes.EvictionMaxPodGracePeriod
+			kubernetesSettings.EvictionSoft = config.BottlerocketSettings.Kubernetes.EvictionSoft
+			kubernetesSettings.EvictionSoftGracePeriod = config.BottlerocketSettings.Kubernetes.EvictionSoftGracePeriod
+			kubernetesSettings.ImageGCHighThresholdPercent = config.BottlerocketSettings.Kubernetes.ImageGCHighThresholdPercent
+			kubernetesSettings.ImageGCLowThresholdPercent = config.BottlerocketSettings.Kubernetes.ImageGCLowThresholdPercent
+			kubernetesSettings.KubeAPIBurst = config.BottlerocketSettings.Kubernetes.KubeAPIBurst
+			kubernetesSettings.KubeAPIQPS = config.BottlerocketSettings.Kubernetes.KubeAPIQPS
+			kubernetesSettings.KubeReserved = config.BottlerocketSettings.Kubernetes.KubeReserved
+			kubernetesSettings.MaxPods = config.BottlerocketSettings.Kubernetes.MaxPods
+			kubernetesSettings.MemoryManagerPolicy = config.BottlerocketSettings.Kubernetes.MemoryManagerPolicy
+			kubernetesSettings.ProviderID = config.KubeletExtraArgs["provider-id"]
+			kubernetesSettings.PodPidsLimit = config.BottlerocketSettings.Kubernetes.PodPidsLimit
+			kubernetesSettings.RegistryBurst = config.BottlerocketSettings.Kubernetes.RegistryBurst
+			kubernetesSettings.RegistryPullQPS = config.BottlerocketSettings.Kubernetes.RegistryPullQPS
+			if config.BottlerocketSettings.Kubernetes.ShutdownGracePeriod != nil {
+				kubernetesSettings.ShutdownGracePeriod = config.BottlerocketSettings.Kubernetes.ShutdownGracePeriod.Duration.String()
+			}
+			if config.BottlerocketSettings.Kubernetes.ShutdownGracePeriodCriticalPods != nil {
+				kubernetesSettings.ShutdownGracePeriodCriticalPods = config.BottlerocketSettings.Kubernetes.ShutdownGracePeriodCriticalPods.Duration.String()
+			}
+			kubernetesSettings.SystemReserved = config.BottlerocketSettings.Kubernetes.SystemReserved
+			kubernetesSettings.TopologyManagerPolicy = config.BottlerocketSettings.Kubernetes.TopologyManagerPolicy
+			kubernetesSettings.TopologyManagerScope = config.BottlerocketSettings.Kubernetes.TopologyManagerScope
+		}
+	}
+
+	return kubernetesSettings, nil
 }
 
 // bottlerocket configuration accepts taints in the format
@@ -431,30 +527,6 @@ func parseNodeLabels(nodeLabels string) string {
 		}
 	}
 	return nodeLabelsToml
-}
-
-func parseSysctlSettings(sysctlSettings map[string]string) string {
-	sysctlSettingsToml := ""
-	for key, value := range sysctlSettings {
-		sysctlSettingsToml += fmt.Sprintf("\"%v\" = \"%v\"\n", key, value)
-	}
-	return sysctlSettingsToml
-}
-
-func parseBootSettings(bootSettings map[string][]string) string {
-	bootSettingsToml := ""
-	for key, value := range bootSettings {
-		var values []string
-		if len(value) != 0 {
-			for _, val := range value {
-				quotedVal := "\"" + val + "\""
-				values = append(values, quotedVal)
-			}
-		}
-		keyVal := strings.Join(values, ",")
-		bootSettingsToml += fmt.Sprintf("\"%v\" = [%v]\n", key, keyVal)
-	}
-	return bootSettingsToml
 }
 
 // Parses through all the users and return list of all user's authorized ssh keys

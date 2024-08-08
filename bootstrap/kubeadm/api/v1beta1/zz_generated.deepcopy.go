@@ -288,6 +288,11 @@ func (in *BottlerocketKubernetesSettings) DeepCopyInto(out *BottlerocketKubernet
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.ContainerLogMaxFiles != nil {
+		in, out := &in.ContainerLogMaxFiles, &out.ContainerLogMaxFiles
+		*out = new(int)
+		**out = **in
+	}
 	if in.CPUCFSQuota != nil {
 		in, out := &in.CPUCFSQuota, &out.CPUCFSQuota
 		*out = new(bool)
@@ -305,12 +310,27 @@ func (in *BottlerocketKubernetesSettings) DeepCopyInto(out *BottlerocketKubernet
 		*out = new(v1.Duration)
 		**out = **in
 	}
+	if in.EventBurst != nil {
+		in, out := &in.EventBurst, &out.EventBurst
+		*out = new(int)
+		**out = **in
+	}
+	if in.EventRecordQPS != nil {
+		in, out := &in.EventRecordQPS, &out.EventRecordQPS
+		*out = new(int)
+		**out = **in
+	}
 	if in.EvictionHard != nil {
 		in, out := &in.EvictionHard, &out.EvictionHard
 		*out = make(map[string]string, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
+	}
+	if in.EvictionMaxPodGracePeriod != nil {
+		in, out := &in.EvictionMaxPodGracePeriod, &out.EvictionMaxPodGracePeriod
+		*out = new(int)
+		**out = **in
 	}
 	if in.EvictionSoft != nil {
 		in, out := &in.EvictionSoft, &out.EvictionSoft
@@ -326,12 +346,52 @@ func (in *BottlerocketKubernetesSettings) DeepCopyInto(out *BottlerocketKubernet
 			(*out)[key] = val
 		}
 	}
+	if in.ImageGCHighThresholdPercent != nil {
+		in, out := &in.ImageGCHighThresholdPercent, &out.ImageGCHighThresholdPercent
+		*out = new(int)
+		**out = **in
+	}
+	if in.ImageGCLowThresholdPercent != nil {
+		in, out := &in.ImageGCLowThresholdPercent, &out.ImageGCLowThresholdPercent
+		*out = new(int)
+		**out = **in
+	}
+	if in.KubeAPIBurst != nil {
+		in, out := &in.KubeAPIBurst, &out.KubeAPIBurst
+		*out = new(int)
+		**out = **in
+	}
+	if in.KubeAPIQPS != nil {
+		in, out := &in.KubeAPIQPS, &out.KubeAPIQPS
+		*out = new(int)
+		**out = **in
+	}
 	if in.KubeReserved != nil {
 		in, out := &in.KubeReserved, &out.KubeReserved
 		*out = make(map[string]string, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
+	}
+	if in.MaxPods != nil {
+		in, out := &in.MaxPods, &out.MaxPods
+		*out = new(int)
+		**out = **in
+	}
+	if in.PodPidsLimit != nil {
+		in, out := &in.PodPidsLimit, &out.PodPidsLimit
+		*out = new(int64)
+		**out = **in
+	}
+	if in.RegistryBurst != nil {
+		in, out := &in.RegistryBurst, &out.RegistryBurst
+		*out = new(int)
+		**out = **in
+	}
+	if in.RegistryPullQPS != nil {
+		in, out := &in.RegistryPullQPS, &out.RegistryPullQPS
+		*out = new(int)
+		**out = **in
 	}
 	if in.ShutdownGracePeriod != nil {
 		in, out := &in.ShutdownGracePeriod, &out.ShutdownGracePeriod

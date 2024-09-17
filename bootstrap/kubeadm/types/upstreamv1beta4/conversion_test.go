@@ -84,7 +84,6 @@ func fuzzFuncs(_ runtimeserializer.CodecFactory) []interface{} {
 func clusterConfigurationFuzzer(obj *ClusterConfiguration, c fuzz.Continue) {
 	c.FuzzNoCustom(obj)
 
-	obj.Proxy = Proxy{}
 	obj.EncryptionAlgorithm = ""
 	obj.CACertificateValidityPeriod = nil
 	obj.CertificateValidityPeriod = nil

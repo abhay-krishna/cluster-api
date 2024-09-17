@@ -706,9 +706,9 @@ func Convert_upstreamv1beta1_BottlerocketKubernetesSettings_To_v1beta1_Bottleroc
 }
 
 func autoConvert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta1_BottlerocketKubernetesSettings(in *v1beta1.BottlerocketKubernetesSettings, out *BottlerocketKubernetesSettings, s conversion.Scope) error {
-	out.MaxPods = in.MaxPods
 	out.AllowedUnsafeSysctls = *(*[]string)(unsafe.Pointer(&in.AllowedUnsafeSysctls))
 	out.ClusterDNSIPs = *(*[]string)(unsafe.Pointer(&in.ClusterDNSIPs))
+	out.MaxPods = in.MaxPods
 	return nil
 }
 
@@ -718,7 +718,15 @@ func Convert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta1_Bottleroc
 }
 
 func autoConvert_upstreamv1beta1_BottlerocketSettings_To_v1beta1_BottlerocketSettings(in *BottlerocketSettings, out *v1beta1.BottlerocketSettings, s conversion.Scope) error {
-	out.Kubernetes = (*v1beta1.BottlerocketKubernetesSettings)(unsafe.Pointer(in.Kubernetes))
+	if in.Kubernetes != nil {
+		in, out := &in.Kubernetes, &out.Kubernetes
+		*out = new(v1beta1.BottlerocketKubernetesSettings)
+		if err := Convert_upstreamv1beta1_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Kubernetes = nil
+	}
 	out.Kernel = (*v1beta1.BottlerocketKernelSettings)(unsafe.Pointer(in.Kernel))
 	out.Boot = (*v1beta1.BottlerocketBootSettings)(unsafe.Pointer(in.Boot))
 	return nil
@@ -730,7 +738,15 @@ func Convert_upstreamv1beta1_BottlerocketSettings_To_v1beta1_BottlerocketSetting
 }
 
 func autoConvert_v1beta1_BottlerocketSettings_To_upstreamv1beta1_BottlerocketSettings(in *v1beta1.BottlerocketSettings, out *BottlerocketSettings, s conversion.Scope) error {
-	out.Kubernetes = (*BottlerocketKubernetesSettings)(unsafe.Pointer(in.Kubernetes))
+	if in.Kubernetes != nil {
+		in, out := &in.Kubernetes, &out.Kubernetes
+		*out = new(BottlerocketKubernetesSettings)
+		if err := Convert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta1_BottlerocketKubernetesSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Kubernetes = nil
+	}
 	out.Kernel = (*BottlerocketKernelSettings)(unsafe.Pointer(in.Kernel))
 	out.Boot = (*BottlerocketBootSettings)(unsafe.Pointer(in.Boot))
 	return nil
@@ -809,7 +825,15 @@ func autoConvert_upstreamv1beta1_ClusterConfiguration_To_v1beta1_ClusterConfigur
 	out.ClusterName = in.ClusterName
 	out.BottlerocketHostContainers = *(*[]v1beta1.BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketHostContainers))
 	out.BottlerocketCustomBootstrapContainers = *(*[]v1beta1.BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
-	out.Bottlerocket = (*v1beta1.BottlerocketSettings)(unsafe.Pointer(in.Bottlerocket))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(v1beta1.BottlerocketSettings)
+		if err := Convert_upstreamv1beta1_BottlerocketSettings_To_v1beta1_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
 	out.CertBundles = *(*[]v1beta1.CertBundle)(unsafe.Pointer(&in.CertBundles))
 	return nil
 }
@@ -859,7 +883,15 @@ func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta1_ClusterConfigur
 	out.ClusterName = in.ClusterName
 	out.BottlerocketHostContainers = *(*[]BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketHostContainers))
 	out.BottlerocketCustomBootstrapContainers = *(*[]BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
-	out.Bottlerocket = (*BottlerocketSettings)(unsafe.Pointer(in.Bottlerocket))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(BottlerocketSettings)
+		if err := Convert_v1beta1_BottlerocketSettings_To_upstreamv1beta1_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
 	out.CertBundles = *(*[]CertBundle)(unsafe.Pointer(&in.CertBundles))
 	return nil
 }
@@ -1157,7 +1189,15 @@ func autoConvert_upstreamv1beta1_JoinConfiguration_To_v1beta1_JoinConfiguration(
 	out.ControlPlane = (*v1beta1.JoinControlPlane)(unsafe.Pointer(in.ControlPlane))
 	out.BottlerocketCustomHostContainers = *(*[]v1beta1.BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketCustomHostContainers))
 	out.BottlerocketCustomBootstrapContainers = *(*[]v1beta1.BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
-	out.Bottlerocket = (*v1beta1.BottlerocketSettings)(unsafe.Pointer(in.Bottlerocket))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(v1beta1.BottlerocketSettings)
+		if err := Convert_upstreamv1beta1_BottlerocketSettings_To_v1beta1_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
 	out.CertBundles = *(*[]v1beta1.CertBundle)(unsafe.Pointer(&in.CertBundles))
 	return nil
 }
@@ -1198,7 +1238,15 @@ func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta1_JoinConfiguration(
 	// WARNING: in.Patches requires manual conversion: does not exist in peer-type
 	out.BottlerocketCustomHostContainers = *(*[]BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketCustomHostContainers))
 	out.BottlerocketCustomBootstrapContainers = *(*[]BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
-	out.Bottlerocket = (*BottlerocketSettings)(unsafe.Pointer(in.Bottlerocket))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(BottlerocketSettings)
+		if err := Convert_v1beta1_BottlerocketSettings_To_upstreamv1beta1_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
 	out.CertBundles = *(*[]CertBundle)(unsafe.Pointer(&in.CertBundles))
 	return nil
 }

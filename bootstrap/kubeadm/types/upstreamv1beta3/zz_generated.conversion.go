@@ -88,6 +88,26 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.AddGeneratedConversionFunc((*BottlerocketAdmin)(nil), (*v1beta1.BottlerocketAdmin)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_BottlerocketAdmin_To_v1beta1_BottlerocketAdmin(a.(*BottlerocketAdmin), b.(*v1beta1.BottlerocketAdmin), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketAdmin)(nil), (*BottlerocketAdmin)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_BottlerocketAdmin_To_upstreamv1beta3_BottlerocketAdmin(a.(*v1beta1.BottlerocketAdmin), b.(*BottlerocketAdmin), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*BottlerocketBootSettings)(nil), (*v1beta1.BottlerocketBootSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_BottlerocketBootSettings_To_v1beta1_BottlerocketBootSettings(a.(*BottlerocketBootSettings), b.(*v1beta1.BottlerocketBootSettings), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketBootSettings)(nil), (*BottlerocketBootSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_BottlerocketBootSettings_To_upstreamv1beta3_BottlerocketBootSettings(a.(*v1beta1.BottlerocketBootSettings), b.(*BottlerocketBootSettings), scope)
+	}); err != nil {
+		return err
+	}
 	if err := s.AddGeneratedConversionFunc((*BottlerocketBootstrap)(nil), (*v1beta1.BottlerocketBootstrap)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_upstreamv1beta3_BottlerocketBootstrap_To_v1beta1_BottlerocketBootstrap(a.(*BottlerocketBootstrap), b.(*v1beta1.BottlerocketBootstrap), scope)
 	}); err != nil {
@@ -98,6 +118,16 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.AddGeneratedConversionFunc((*BottlerocketBootstrapContainer)(nil), (*v1beta1.BottlerocketBootstrapContainer)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_BottlerocketBootstrapContainer_To_v1beta1_BottlerocketBootstrapContainer(a.(*BottlerocketBootstrapContainer), b.(*v1beta1.BottlerocketBootstrapContainer), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketBootstrapContainer)(nil), (*BottlerocketBootstrapContainer)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_BottlerocketBootstrapContainer_To_upstreamv1beta3_BottlerocketBootstrapContainer(a.(*v1beta1.BottlerocketBootstrapContainer), b.(*BottlerocketBootstrapContainer), scope)
+	}); err != nil {
+		return err
+	}
 	if err := s.AddGeneratedConversionFunc((*BottlerocketControl)(nil), (*v1beta1.BottlerocketControl)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_upstreamv1beta3_BottlerocketControl_To_v1beta1_BottlerocketControl(a.(*BottlerocketControl), b.(*v1beta1.BottlerocketControl), scope)
 	}); err != nil {
@@ -105,6 +135,56 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketControl)(nil), (*BottlerocketControl)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_BottlerocketControl_To_upstreamv1beta3_BottlerocketControl(a.(*v1beta1.BottlerocketControl), b.(*BottlerocketControl), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*BottlerocketHostContainer)(nil), (*v1beta1.BottlerocketHostContainer)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_BottlerocketHostContainer_To_v1beta1_BottlerocketHostContainer(a.(*BottlerocketHostContainer), b.(*v1beta1.BottlerocketHostContainer), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketHostContainer)(nil), (*BottlerocketHostContainer)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_BottlerocketHostContainer_To_upstreamv1beta3_BottlerocketHostContainer(a.(*v1beta1.BottlerocketHostContainer), b.(*BottlerocketHostContainer), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*BottlerocketKernelSettings)(nil), (*v1beta1.BottlerocketKernelSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_BottlerocketKernelSettings_To_v1beta1_BottlerocketKernelSettings(a.(*BottlerocketKernelSettings), b.(*v1beta1.BottlerocketKernelSettings), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketKernelSettings)(nil), (*BottlerocketKernelSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_BottlerocketKernelSettings_To_upstreamv1beta3_BottlerocketKernelSettings(a.(*v1beta1.BottlerocketKernelSettings), b.(*BottlerocketKernelSettings), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*BottlerocketKubernetesSettings)(nil), (*v1beta1.BottlerocketKubernetesSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings(a.(*BottlerocketKubernetesSettings), b.(*v1beta1.BottlerocketKubernetesSettings), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketKubernetesSettings)(nil), (*BottlerocketKubernetesSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta3_BottlerocketKubernetesSettings(a.(*v1beta1.BottlerocketKubernetesSettings), b.(*BottlerocketKubernetesSettings), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*BottlerocketSettings)(nil), (*v1beta1.BottlerocketSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_BottlerocketSettings_To_v1beta1_BottlerocketSettings(a.(*BottlerocketSettings), b.(*v1beta1.BottlerocketSettings), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.BottlerocketSettings)(nil), (*BottlerocketSettings)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_BottlerocketSettings_To_upstreamv1beta3_BottlerocketSettings(a.(*v1beta1.BottlerocketSettings), b.(*BottlerocketSettings), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*CertBundle)(nil), (*v1beta1.CertBundle)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_CertBundle_To_v1beta1_CertBundle(a.(*CertBundle), b.(*v1beta1.CertBundle), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.CertBundle)(nil), (*CertBundle)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_CertBundle_To_upstreamv1beta3_CertBundle(a.(*v1beta1.CertBundle), b.(*CertBundle), scope)
 	}); err != nil {
 		return err
 	}
@@ -210,6 +290,16 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddGeneratedConversionFunc((*LocalEtcd)(nil), (*v1beta1.LocalEtcd)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_upstreamv1beta3_LocalEtcd_To_v1beta1_LocalEtcd(a.(*LocalEtcd), b.(*v1beta1.LocalEtcd), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*Mirror)(nil), (*v1beta1.Mirror)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_upstreamv1beta3_Mirror_To_v1beta1_Mirror(a.(*Mirror), b.(*v1beta1.Mirror), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddGeneratedConversionFunc((*v1beta1.Mirror)(nil), (*Mirror)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_Mirror_To_upstreamv1beta3_Mirror(a.(*v1beta1.Mirror), b.(*Mirror), scope)
 	}); err != nil {
 		return err
 	}
@@ -429,6 +519,50 @@ func Convert_v1beta1_BootstrapTokenString_To_upstreamv1beta3_BootstrapTokenStrin
 	return autoConvert_v1beta1_BootstrapTokenString_To_upstreamv1beta3_BootstrapTokenString(in, out, s)
 }
 
+func autoConvert_upstreamv1beta3_BottlerocketAdmin_To_v1beta1_BottlerocketAdmin(in *BottlerocketAdmin, out *v1beta1.BottlerocketAdmin, s conversion.Scope) error {
+	if err := Convert_upstreamv1beta3_ImageMeta_To_v1beta1_ImageMeta(&in.ImageMeta, &out.ImageMeta, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Convert_upstreamv1beta3_BottlerocketAdmin_To_v1beta1_BottlerocketAdmin is an autogenerated conversion function.
+func Convert_upstreamv1beta3_BottlerocketAdmin_To_v1beta1_BottlerocketAdmin(in *BottlerocketAdmin, out *v1beta1.BottlerocketAdmin, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_BottlerocketAdmin_To_v1beta1_BottlerocketAdmin(in, out, s)
+}
+
+func autoConvert_v1beta1_BottlerocketAdmin_To_upstreamv1beta3_BottlerocketAdmin(in *v1beta1.BottlerocketAdmin, out *BottlerocketAdmin, s conversion.Scope) error {
+	if err := Convert_v1beta1_ImageMeta_To_upstreamv1beta3_ImageMeta(&in.ImageMeta, &out.ImageMeta, s); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Convert_v1beta1_BottlerocketAdmin_To_upstreamv1beta3_BottlerocketAdmin is an autogenerated conversion function.
+func Convert_v1beta1_BottlerocketAdmin_To_upstreamv1beta3_BottlerocketAdmin(in *v1beta1.BottlerocketAdmin, out *BottlerocketAdmin, s conversion.Scope) error {
+	return autoConvert_v1beta1_BottlerocketAdmin_To_upstreamv1beta3_BottlerocketAdmin(in, out, s)
+}
+
+func autoConvert_upstreamv1beta3_BottlerocketBootSettings_To_v1beta1_BottlerocketBootSettings(in *BottlerocketBootSettings, out *v1beta1.BottlerocketBootSettings, s conversion.Scope) error {
+	out.BootKernelParameters = *(*map[string][]string)(unsafe.Pointer(&in.BootKernelParameters))
+	return nil
+}
+
+// Convert_upstreamv1beta3_BottlerocketBootSettings_To_v1beta1_BottlerocketBootSettings is an autogenerated conversion function.
+func Convert_upstreamv1beta3_BottlerocketBootSettings_To_v1beta1_BottlerocketBootSettings(in *BottlerocketBootSettings, out *v1beta1.BottlerocketBootSettings, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_BottlerocketBootSettings_To_v1beta1_BottlerocketBootSettings(in, out, s)
+}
+
+func autoConvert_v1beta1_BottlerocketBootSettings_To_upstreamv1beta3_BottlerocketBootSettings(in *v1beta1.BottlerocketBootSettings, out *BottlerocketBootSettings, s conversion.Scope) error {
+	out.BootKernelParameters = *(*map[string][]string)(unsafe.Pointer(&in.BootKernelParameters))
+	return nil
+}
+
+// Convert_v1beta1_BottlerocketBootSettings_To_upstreamv1beta3_BottlerocketBootSettings is an autogenerated conversion function.
+func Convert_v1beta1_BottlerocketBootSettings_To_upstreamv1beta3_BottlerocketBootSettings(in *v1beta1.BottlerocketBootSettings, out *BottlerocketBootSettings, s conversion.Scope) error {
+	return autoConvert_v1beta1_BottlerocketBootSettings_To_upstreamv1beta3_BottlerocketBootSettings(in, out, s)
+}
+
 func autoConvert_upstreamv1beta3_BottlerocketBootstrap_To_v1beta1_BottlerocketBootstrap(in *BottlerocketBootstrap, out *v1beta1.BottlerocketBootstrap, s conversion.Scope) error {
 	if err := Convert_upstreamv1beta3_ImageMeta_To_v1beta1_ImageMeta(&in.ImageMeta, &out.ImageMeta, s); err != nil {
 		return err
@@ -451,6 +585,38 @@ func autoConvert_v1beta1_BottlerocketBootstrap_To_upstreamv1beta3_BottlerocketBo
 // Convert_v1beta1_BottlerocketBootstrap_To_upstreamv1beta3_BottlerocketBootstrap is an autogenerated conversion function.
 func Convert_v1beta1_BottlerocketBootstrap_To_upstreamv1beta3_BottlerocketBootstrap(in *v1beta1.BottlerocketBootstrap, out *BottlerocketBootstrap, s conversion.Scope) error {
 	return autoConvert_v1beta1_BottlerocketBootstrap_To_upstreamv1beta3_BottlerocketBootstrap(in, out, s)
+}
+
+func autoConvert_upstreamv1beta3_BottlerocketBootstrapContainer_To_v1beta1_BottlerocketBootstrapContainer(in *BottlerocketBootstrapContainer, out *v1beta1.BottlerocketBootstrapContainer, s conversion.Scope) error {
+	out.Name = in.Name
+	if err := Convert_upstreamv1beta3_ImageMeta_To_v1beta1_ImageMeta(&in.ImageMeta, &out.ImageMeta, s); err != nil {
+		return err
+	}
+	out.Essential = in.Essential
+	out.Mode = in.Mode
+	out.UserData = in.UserData
+	return nil
+}
+
+// Convert_upstreamv1beta3_BottlerocketBootstrapContainer_To_v1beta1_BottlerocketBootstrapContainer is an autogenerated conversion function.
+func Convert_upstreamv1beta3_BottlerocketBootstrapContainer_To_v1beta1_BottlerocketBootstrapContainer(in *BottlerocketBootstrapContainer, out *v1beta1.BottlerocketBootstrapContainer, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_BottlerocketBootstrapContainer_To_v1beta1_BottlerocketBootstrapContainer(in, out, s)
+}
+
+func autoConvert_v1beta1_BottlerocketBootstrapContainer_To_upstreamv1beta3_BottlerocketBootstrapContainer(in *v1beta1.BottlerocketBootstrapContainer, out *BottlerocketBootstrapContainer, s conversion.Scope) error {
+	out.Name = in.Name
+	if err := Convert_v1beta1_ImageMeta_To_upstreamv1beta3_ImageMeta(&in.ImageMeta, &out.ImageMeta, s); err != nil {
+		return err
+	}
+	out.Essential = in.Essential
+	out.Mode = in.Mode
+	out.UserData = in.UserData
+	return nil
+}
+
+// Convert_v1beta1_BottlerocketBootstrapContainer_To_upstreamv1beta3_BottlerocketBootstrapContainer is an autogenerated conversion function.
+func Convert_v1beta1_BottlerocketBootstrapContainer_To_upstreamv1beta3_BottlerocketBootstrapContainer(in *v1beta1.BottlerocketBootstrapContainer, out *BottlerocketBootstrapContainer, s conversion.Scope) error {
+	return autoConvert_v1beta1_BottlerocketBootstrapContainer_To_upstreamv1beta3_BottlerocketBootstrapContainer(in, out, s)
 }
 
 func autoConvert_upstreamv1beta3_BottlerocketControl_To_v1beta1_BottlerocketControl(in *BottlerocketControl, out *v1beta1.BottlerocketControl, s conversion.Scope) error {
@@ -477,11 +643,150 @@ func Convert_v1beta1_BottlerocketControl_To_upstreamv1beta3_BottlerocketControl(
 	return autoConvert_v1beta1_BottlerocketControl_To_upstreamv1beta3_BottlerocketControl(in, out, s)
 }
 
+func autoConvert_upstreamv1beta3_BottlerocketHostContainer_To_v1beta1_BottlerocketHostContainer(in *BottlerocketHostContainer, out *v1beta1.BottlerocketHostContainer, s conversion.Scope) error {
+	out.Name = in.Name
+	out.Superpowered = in.Superpowered
+	if err := Convert_upstreamv1beta3_ImageMeta_To_v1beta1_ImageMeta(&in.ImageMeta, &out.ImageMeta, s); err != nil {
+		return err
+	}
+	out.UserData = in.UserData
+	return nil
+}
+
+// Convert_upstreamv1beta3_BottlerocketHostContainer_To_v1beta1_BottlerocketHostContainer is an autogenerated conversion function.
+func Convert_upstreamv1beta3_BottlerocketHostContainer_To_v1beta1_BottlerocketHostContainer(in *BottlerocketHostContainer, out *v1beta1.BottlerocketHostContainer, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_BottlerocketHostContainer_To_v1beta1_BottlerocketHostContainer(in, out, s)
+}
+
+func autoConvert_v1beta1_BottlerocketHostContainer_To_upstreamv1beta3_BottlerocketHostContainer(in *v1beta1.BottlerocketHostContainer, out *BottlerocketHostContainer, s conversion.Scope) error {
+	out.Name = in.Name
+	out.Superpowered = in.Superpowered
+	if err := Convert_v1beta1_ImageMeta_To_upstreamv1beta3_ImageMeta(&in.ImageMeta, &out.ImageMeta, s); err != nil {
+		return err
+	}
+	out.UserData = in.UserData
+	return nil
+}
+
+// Convert_v1beta1_BottlerocketHostContainer_To_upstreamv1beta3_BottlerocketHostContainer is an autogenerated conversion function.
+func Convert_v1beta1_BottlerocketHostContainer_To_upstreamv1beta3_BottlerocketHostContainer(in *v1beta1.BottlerocketHostContainer, out *BottlerocketHostContainer, s conversion.Scope) error {
+	return autoConvert_v1beta1_BottlerocketHostContainer_To_upstreamv1beta3_BottlerocketHostContainer(in, out, s)
+}
+
+func autoConvert_upstreamv1beta3_BottlerocketKernelSettings_To_v1beta1_BottlerocketKernelSettings(in *BottlerocketKernelSettings, out *v1beta1.BottlerocketKernelSettings, s conversion.Scope) error {
+	out.SysctlSettings = *(*map[string]string)(unsafe.Pointer(&in.SysctlSettings))
+	return nil
+}
+
+// Convert_upstreamv1beta3_BottlerocketKernelSettings_To_v1beta1_BottlerocketKernelSettings is an autogenerated conversion function.
+func Convert_upstreamv1beta3_BottlerocketKernelSettings_To_v1beta1_BottlerocketKernelSettings(in *BottlerocketKernelSettings, out *v1beta1.BottlerocketKernelSettings, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_BottlerocketKernelSettings_To_v1beta1_BottlerocketKernelSettings(in, out, s)
+}
+
+func autoConvert_v1beta1_BottlerocketKernelSettings_To_upstreamv1beta3_BottlerocketKernelSettings(in *v1beta1.BottlerocketKernelSettings, out *BottlerocketKernelSettings, s conversion.Scope) error {
+	out.SysctlSettings = *(*map[string]string)(unsafe.Pointer(&in.SysctlSettings))
+	return nil
+}
+
+// Convert_v1beta1_BottlerocketKernelSettings_To_upstreamv1beta3_BottlerocketKernelSettings is an autogenerated conversion function.
+func Convert_v1beta1_BottlerocketKernelSettings_To_upstreamv1beta3_BottlerocketKernelSettings(in *v1beta1.BottlerocketKernelSettings, out *BottlerocketKernelSettings, s conversion.Scope) error {
+	return autoConvert_v1beta1_BottlerocketKernelSettings_To_upstreamv1beta3_BottlerocketKernelSettings(in, out, s)
+}
+
+func autoConvert_upstreamv1beta3_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings(in *BottlerocketKubernetesSettings, out *v1beta1.BottlerocketKubernetesSettings, s conversion.Scope) error {
+	out.MaxPods = in.MaxPods
+	out.AllowedUnsafeSysctls = *(*[]string)(unsafe.Pointer(&in.AllowedUnsafeSysctls))
+	out.ClusterDNSIPs = *(*[]string)(unsafe.Pointer(&in.ClusterDNSIPs))
+	return nil
+}
+
+// Convert_upstreamv1beta3_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings is an autogenerated conversion function.
+func Convert_upstreamv1beta3_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings(in *BottlerocketKubernetesSettings, out *v1beta1.BottlerocketKubernetesSettings, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings(in, out, s)
+}
+
+// Convert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta3_BottlerocketKubernetesSettings is an autogenerated conversion function.
+func Convert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta3_BottlerocketKubernetesSettings(in *v1beta1.BottlerocketKubernetesSettings, out *BottlerocketKubernetesSettings, s conversion.Scope) error {
+	return autoConvert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta3_BottlerocketKubernetesSettings(in, out, s)
+}
+
+func autoConvert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta3_BottlerocketKubernetesSettings(in *v1beta1.BottlerocketKubernetesSettings, out *BottlerocketKubernetesSettings, s conversion.Scope) error {
+	out.AllowedUnsafeSysctls = *(*[]string)(unsafe.Pointer(&in.AllowedUnsafeSysctls))
+	out.ClusterDNSIPs = *(*[]string)(unsafe.Pointer(&in.ClusterDNSIPs))
+	out.MaxPods = in.MaxPods
+	return nil
+}
+
+func autoConvert_upstreamv1beta3_BottlerocketSettings_To_v1beta1_BottlerocketSettings(in *BottlerocketSettings, out *v1beta1.BottlerocketSettings, s conversion.Scope) error {
+	if in.Kubernetes != nil {
+		in, out := &in.Kubernetes, &out.Kubernetes
+		*out = new(v1beta1.BottlerocketKubernetesSettings)
+		if err := Convert_upstreamv1beta3_BottlerocketKubernetesSettings_To_v1beta1_BottlerocketKubernetesSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Kubernetes = nil
+	}
+	out.Kernel = (*v1beta1.BottlerocketKernelSettings)(unsafe.Pointer(in.Kernel))
+	out.Boot = (*v1beta1.BottlerocketBootSettings)(unsafe.Pointer(in.Boot))
+	return nil
+}
+
+// Convert_upstreamv1beta3_BottlerocketSettings_To_v1beta1_BottlerocketSettings is an autogenerated conversion function.
+func Convert_upstreamv1beta3_BottlerocketSettings_To_v1beta1_BottlerocketSettings(in *BottlerocketSettings, out *v1beta1.BottlerocketSettings, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_BottlerocketSettings_To_v1beta1_BottlerocketSettings(in, out, s)
+}
+
+func autoConvert_v1beta1_BottlerocketSettings_To_upstreamv1beta3_BottlerocketSettings(in *v1beta1.BottlerocketSettings, out *BottlerocketSettings, s conversion.Scope) error {
+	if in.Kubernetes != nil {
+		in, out := &in.Kubernetes, &out.Kubernetes
+		*out = new(BottlerocketKubernetesSettings)
+		if err := Convert_v1beta1_BottlerocketKubernetesSettings_To_upstreamv1beta3_BottlerocketKubernetesSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Kubernetes = nil
+	}
+	out.Kernel = (*BottlerocketKernelSettings)(unsafe.Pointer(in.Kernel))
+	out.Boot = (*BottlerocketBootSettings)(unsafe.Pointer(in.Boot))
+	return nil
+}
+
+// Convert_v1beta1_BottlerocketSettings_To_upstreamv1beta3_BottlerocketSettings is an autogenerated conversion function.
+func Convert_v1beta1_BottlerocketSettings_To_upstreamv1beta3_BottlerocketSettings(in *v1beta1.BottlerocketSettings, out *BottlerocketSettings, s conversion.Scope) error {
+	return autoConvert_v1beta1_BottlerocketSettings_To_upstreamv1beta3_BottlerocketSettings(in, out, s)
+}
+
+func autoConvert_upstreamv1beta3_CertBundle_To_v1beta1_CertBundle(in *CertBundle, out *v1beta1.CertBundle, s conversion.Scope) error {
+	out.Name = in.Name
+	out.Data = in.Data
+	return nil
+}
+
+// Convert_upstreamv1beta3_CertBundle_To_v1beta1_CertBundle is an autogenerated conversion function.
+func Convert_upstreamv1beta3_CertBundle_To_v1beta1_CertBundle(in *CertBundle, out *v1beta1.CertBundle, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_CertBundle_To_v1beta1_CertBundle(in, out, s)
+}
+
+func autoConvert_v1beta1_CertBundle_To_upstreamv1beta3_CertBundle(in *v1beta1.CertBundle, out *CertBundle, s conversion.Scope) error {
+	out.Name = in.Name
+	out.Data = in.Data
+	return nil
+}
+
+// Convert_v1beta1_CertBundle_To_upstreamv1beta3_CertBundle is an autogenerated conversion function.
+func Convert_v1beta1_CertBundle_To_upstreamv1beta3_CertBundle(in *v1beta1.CertBundle, out *CertBundle, s conversion.Scope) error {
+	return autoConvert_v1beta1_CertBundle_To_upstreamv1beta3_CertBundle(in, out, s)
+}
+
 func autoConvert_upstreamv1beta3_ClusterConfiguration_To_v1beta1_ClusterConfiguration(in *ClusterConfiguration, out *v1beta1.ClusterConfiguration, s conversion.Scope) error {
 	if err := Convert_upstreamv1beta3_Pause_To_v1beta1_Pause(&in.Pause, &out.Pause, s); err != nil {
 		return err
 	}
 	if err := Convert_upstreamv1beta3_BottlerocketBootstrap_To_v1beta1_BottlerocketBootstrap(&in.BottlerocketBootstrap, &out.BottlerocketBootstrap, s); err != nil {
+		return err
+	}
+	if err := Convert_upstreamv1beta3_BottlerocketAdmin_To_v1beta1_BottlerocketAdmin(&in.BottlerocketAdmin, &out.BottlerocketAdmin, s); err != nil {
 		return err
 	}
 	if err := Convert_upstreamv1beta3_BottlerocketControl_To_v1beta1_BottlerocketControl(&in.BottlerocketControl, &out.BottlerocketControl, s); err != nil {
@@ -517,6 +822,18 @@ func autoConvert_upstreamv1beta3_ClusterConfiguration_To_v1beta1_ClusterConfigur
 	out.ImageRepository = in.ImageRepository
 	out.FeatureGates = *(*map[string]bool)(unsafe.Pointer(&in.FeatureGates))
 	out.ClusterName = in.ClusterName
+	out.BottlerocketHostContainers = *(*[]v1beta1.BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketHostContainers))
+	out.BottlerocketCustomBootstrapContainers = *(*[]v1beta1.BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(v1beta1.BottlerocketSettings)
+		if err := Convert_upstreamv1beta3_BottlerocketSettings_To_v1beta1_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
+	out.CertBundles = *(*[]v1beta1.CertBundle)(unsafe.Pointer(&in.CertBundles))
 	return nil
 }
 
@@ -532,7 +849,9 @@ func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta3_ClusterConfigur
 	if err := Convert_v1beta1_BottlerocketBootstrap_To_upstreamv1beta3_BottlerocketBootstrap(&in.BottlerocketBootstrap, &out.BottlerocketBootstrap, s); err != nil {
 		return err
 	}
-	// WARNING: in.BottlerocketAdmin requires manual conversion: does not exist in peer-type
+	if err := Convert_v1beta1_BottlerocketAdmin_To_upstreamv1beta3_BottlerocketAdmin(&in.BottlerocketAdmin, &out.BottlerocketAdmin, s); err != nil {
+		return err
+	}
 	if err := Convert_v1beta1_BottlerocketControl_To_upstreamv1beta3_BottlerocketControl(&in.BottlerocketControl, &out.BottlerocketControl, s); err != nil {
 		return err
 	}
@@ -566,10 +885,18 @@ func autoConvert_v1beta1_ClusterConfiguration_To_upstreamv1beta3_ClusterConfigur
 	out.ImageRepository = in.ImageRepository
 	out.FeatureGates = *(*map[string]bool)(unsafe.Pointer(&in.FeatureGates))
 	out.ClusterName = in.ClusterName
-	// WARNING: in.BottlerocketHostContainers requires manual conversion: does not exist in peer-type
-	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
-	// WARNING: in.Bottlerocket requires manual conversion: does not exist in peer-type
-	// WARNING: in.CertBundles requires manual conversion: does not exist in peer-type
+	out.BottlerocketHostContainers = *(*[]BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketHostContainers))
+	out.BottlerocketCustomBootstrapContainers = *(*[]BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(BottlerocketSettings)
+		if err := Convert_v1beta1_BottlerocketSettings_To_upstreamv1beta3_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
+	out.CertBundles = *(*[]CertBundle)(unsafe.Pointer(&in.CertBundles))
 	return nil
 }
 
@@ -831,6 +1158,9 @@ func autoConvert_upstreamv1beta3_JoinConfiguration_To_v1beta1_JoinConfiguration(
 	if err := Convert_upstreamv1beta3_BottlerocketBootstrap_To_v1beta1_BottlerocketBootstrap(&in.BottlerocketBootstrap, &out.BottlerocketBootstrap, s); err != nil {
 		return err
 	}
+	if err := Convert_upstreamv1beta3_BottlerocketAdmin_To_v1beta1_BottlerocketAdmin(&in.BottlerocketAdmin, &out.BottlerocketAdmin, s); err != nil {
+		return err
+	}
 	if err := Convert_upstreamv1beta3_BottlerocketControl_To_v1beta1_BottlerocketControl(&in.BottlerocketControl, &out.BottlerocketControl, s); err != nil {
 		return err
 	}
@@ -856,6 +1186,18 @@ func autoConvert_upstreamv1beta3_JoinConfiguration_To_v1beta1_JoinConfiguration(
 	} else {
 		out.ControlPlane = nil
 	}
+	out.BottlerocketCustomHostContainers = *(*[]v1beta1.BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketCustomHostContainers))
+	out.BottlerocketCustomBootstrapContainers = *(*[]v1beta1.BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(v1beta1.BottlerocketSettings)
+		if err := Convert_upstreamv1beta3_BottlerocketSettings_To_v1beta1_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
+	out.CertBundles = *(*[]v1beta1.CertBundle)(unsafe.Pointer(&in.CertBundles))
 	out.SkipPhases = *(*[]string)(unsafe.Pointer(&in.SkipPhases))
 	out.Patches = (*v1beta1.Patches)(unsafe.Pointer(in.Patches))
 	return nil
@@ -873,7 +1215,9 @@ func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(
 	if err := Convert_v1beta1_BottlerocketBootstrap_To_upstreamv1beta3_BottlerocketBootstrap(&in.BottlerocketBootstrap, &out.BottlerocketBootstrap, s); err != nil {
 		return err
 	}
-	// WARNING: in.BottlerocketAdmin requires manual conversion: does not exist in peer-type
+	if err := Convert_v1beta1_BottlerocketAdmin_To_upstreamv1beta3_BottlerocketAdmin(&in.BottlerocketAdmin, &out.BottlerocketAdmin, s); err != nil {
+		return err
+	}
 	if err := Convert_v1beta1_BottlerocketControl_To_upstreamv1beta3_BottlerocketControl(&in.BottlerocketControl, &out.BottlerocketControl, s); err != nil {
 		return err
 	}
@@ -901,10 +1245,18 @@ func autoConvert_v1beta1_JoinConfiguration_To_upstreamv1beta3_JoinConfiguration(
 	}
 	out.SkipPhases = *(*[]string)(unsafe.Pointer(&in.SkipPhases))
 	out.Patches = (*Patches)(unsafe.Pointer(in.Patches))
-	// WARNING: in.BottlerocketCustomHostContainers requires manual conversion: does not exist in peer-type
-	// WARNING: in.BottlerocketCustomBootstrapContainers requires manual conversion: does not exist in peer-type
-	// WARNING: in.Bottlerocket requires manual conversion: does not exist in peer-type
-	// WARNING: in.CertBundles requires manual conversion: does not exist in peer-type
+	out.BottlerocketCustomHostContainers = *(*[]BottlerocketHostContainer)(unsafe.Pointer(&in.BottlerocketCustomHostContainers))
+	out.BottlerocketCustomBootstrapContainers = *(*[]BottlerocketBootstrapContainer)(unsafe.Pointer(&in.BottlerocketCustomBootstrapContainers))
+	if in.Bottlerocket != nil {
+		in, out := &in.Bottlerocket, &out.Bottlerocket
+		*out = new(BottlerocketSettings)
+		if err := Convert_v1beta1_BottlerocketSettings_To_upstreamv1beta3_BottlerocketSettings(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.Bottlerocket = nil
+	}
+	out.CertBundles = *(*[]CertBundle)(unsafe.Pointer(&in.CertBundles))
 	return nil
 }
 
@@ -959,6 +1311,28 @@ func autoConvert_v1beta1_LocalEtcd_To_upstreamv1beta3_LocalEtcd(in *v1beta1.Loca
 	out.ServerCertSANs = *(*[]string)(unsafe.Pointer(&in.ServerCertSANs))
 	out.PeerCertSANs = *(*[]string)(unsafe.Pointer(&in.PeerCertSANs))
 	return nil
+}
+
+func autoConvert_upstreamv1beta3_Mirror_To_v1beta1_Mirror(in *Mirror, out *v1beta1.Mirror, s conversion.Scope) error {
+	out.Registry = in.Registry
+	out.Endpoints = *(*[]string)(unsafe.Pointer(&in.Endpoints))
+	return nil
+}
+
+// Convert_upstreamv1beta3_Mirror_To_v1beta1_Mirror is an autogenerated conversion function.
+func Convert_upstreamv1beta3_Mirror_To_v1beta1_Mirror(in *Mirror, out *v1beta1.Mirror, s conversion.Scope) error {
+	return autoConvert_upstreamv1beta3_Mirror_To_v1beta1_Mirror(in, out, s)
+}
+
+func autoConvert_v1beta1_Mirror_To_upstreamv1beta3_Mirror(in *v1beta1.Mirror, out *Mirror, s conversion.Scope) error {
+	out.Registry = in.Registry
+	out.Endpoints = *(*[]string)(unsafe.Pointer(&in.Endpoints))
+	return nil
+}
+
+// Convert_v1beta1_Mirror_To_upstreamv1beta3_Mirror is an autogenerated conversion function.
+func Convert_v1beta1_Mirror_To_upstreamv1beta3_Mirror(in *v1beta1.Mirror, out *Mirror, s conversion.Scope) error {
+	return autoConvert_v1beta1_Mirror_To_upstreamv1beta3_Mirror(in, out, s)
 }
 
 func autoConvert_upstreamv1beta3_Networking_To_v1beta1_Networking(in *Networking, out *v1beta1.Networking, s conversion.Scope) error {
@@ -1080,6 +1454,7 @@ func Convert_v1beta1_ProxyConfiguration_To_upstreamv1beta3_ProxyConfiguration(in
 func autoConvert_upstreamv1beta3_RegistryMirrorConfiguration_To_v1beta1_RegistryMirrorConfiguration(in *RegistryMirrorConfiguration, out *v1beta1.RegistryMirrorConfiguration, s conversion.Scope) error {
 	out.Endpoint = in.Endpoint
 	out.CACert = in.CACert
+	// INFO: in.Mirrors opted out of conversion generation
 	return nil
 }
 

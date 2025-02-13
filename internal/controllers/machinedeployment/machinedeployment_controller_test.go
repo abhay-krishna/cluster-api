@@ -17,26 +17,36 @@ limitations under the License.
 package machinedeployment
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controllers/external"
+	"sigs.k8s.io/cluster-api/internal/util/ssa"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/cluster-api/util/patch"
+	"sigs.k8s.io/cluster-api/util/test/builder"
 )
 
 const (
 	machineDeploymentNamespace = "md-test"
+	version128                 = "v1.28.0"
 )
 
 var _ reconcile.Reconciler = &Reconciler{}
@@ -47,7 +57,7 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 
 		t.Log("Creating the namespace")
 		ns, err := env.CreateNamespace(ctx, machineDeploymentNamespace)
-		g.Expect(err).To(BeNil())
+		g.Expect(err).ToNot(HaveOccurred())
 
 		t.Log("Creating the Cluster")
 		cluster := &clusterv1.Cluster{ObjectMeta: metav1.ObjectMeta{Namespace: ns.Name, Name: "test-cluster"}}
@@ -55,6 +65,11 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 
 		t.Log("Creating the Cluster Kubeconfig Secret")
 		g.Expect(env.CreateKubeconfigSecret(ctx, cluster)).To(Succeed())
+
+		// Set InfrastructureReady to true so ClusterCache creates the clusterAccessor.
+		patch := client.MergeFrom(cluster.DeepCopy())
+		cluster.Status.InfrastructureReady = true
+		g.Expect(env.Status().Patch(ctx, cluster, patch)).To(Succeed())
 
 		return ns, cluster
 	}
@@ -75,7 +90,7 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 
 		labels := map[string]string{
 			"foo":                      "bar",
-			clusterv1.ClusterLabelName: testCluster.Name,
+			clusterv1.ClusterNameLabel: testCluster.Name,
 		}
 		version := "v1.10.3"
 		deployment := &clusterv1.MachineDeployment{
@@ -83,25 +98,26 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 				GenerateName: "md-",
 				Namespace:    namespace.Name,
 				Labels: map[string]string{
-					clusterv1.ClusterLabelName: testCluster.Name,
+					clusterv1.ClusterNameLabel: testCluster.Name,
 				},
 			},
 			Spec: clusterv1.MachineDeploymentSpec{
 				ClusterName:          testCluster.Name,
-				MinReadySeconds:      pointer.Int32Ptr(0),
-				Replicas:             pointer.Int32Ptr(2),
-				RevisionHistoryLimit: pointer.Int32Ptr(0),
+				MinReadySeconds:      ptr.To[int32](0),
+				Replicas:             ptr.To[int32](2),
+				RevisionHistoryLimit: ptr.To[int32](0),
 				Selector: metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						clusterv1.ClusterLabelName: testCluster.Name,
-					},
+					// We're using the same labels for spec.selector and spec.template.labels.
+					// The labels are later changed and we will use the initial labels later to
+					// verify that all original MachineSets have been deleted.
+					MatchLabels: labels,
 				},
 				Strategy: &clusterv1.MachineDeploymentStrategy{
 					Type: clusterv1.RollingUpdateMachineDeploymentStrategyType,
 					RollingUpdate: &clusterv1.MachineRollingUpdateDeployment{
 						MaxUnavailable: intOrStrPtr(0),
 						MaxSurge:       intOrStrPtr(1),
-						DeletePolicy:   pointer.StringPtr("Oldest"),
+						DeletePolicy:   ptr.To("Oldest"),
 					},
 				},
 				Template: clusterv1.MachineTemplateSpec{
@@ -115,9 +131,10 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 							APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
 							Kind:       "GenericInfrastructureMachineTemplate",
 							Name:       "md-template",
+							Namespace:  namespace.Name,
 						},
 						Bootstrap: clusterv1.Bootstrap{
-							DataSecretName: pointer.StringPtr("data-secret-name"),
+							DataSecretName: ptr.To("data-secret-name"),
 						},
 					},
 				},
@@ -139,15 +156,17 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 		}
 		infraTmpl := &unstructured.Unstructured{
 			Object: map[string]interface{}{
+				"kind":       "GenericInfrastructureMachineTemplate",
+				"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+				"metadata": map[string]interface{}{
+					"name":      "md-template",
+					"namespace": namespace.Name,
+				},
 				"spec": map[string]interface{}{
 					"template": infraResource,
 				},
 			},
 		}
-		infraTmpl.SetKind("GenericInfrastructureMachineTemplate")
-		infraTmpl.SetAPIVersion("infrastructure.cluster.x-k8s.io/v1beta1")
-		infraTmpl.SetName("md-template")
-		infraTmpl.SetNamespace(namespace.Name)
 		t.Log("Creating the infrastructure template")
 		g.Expect(env.Create(ctx, infraTmpl)).To(Succeed())
 
@@ -165,7 +184,7 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 			if err := env.Get(ctx, key, deployment); err != nil {
 				return false
 			}
-			if len(deployment.Labels) == 0 || deployment.Labels[clusterv1.ClusterLabelName] != testCluster.Name {
+			if len(deployment.Labels) == 0 || deployment.Labels[clusterv1.ClusterNameLabel] != testCluster.Name {
 				return false
 			}
 			if len(deployment.OwnerReferences) == 0 || deployment.OwnerReferences[0].Name != testCluster.Name {
@@ -189,7 +208,7 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 
 		t.Log("Verifying the linked infrastructure template has a cluster owner reference")
 		g.Eventually(func() bool {
-			obj, err := external.Get(ctx, env, &deployment.Spec.Template.Spec.InfrastructureRef, deployment.Namespace)
+			obj, err := external.Get(ctx, env, &deployment.Spec.Template.Spec.InfrastructureRef)
 			if err != nil {
 				return false
 			}
@@ -202,8 +221,16 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 			})
 		}, timeout).Should(BeTrue())
 
-		// Verify that expected number of machines are created
-		t.Log("Verify expected number of machines are created")
+		t.Log("Verify MachineSet has expected replicas and version")
+		firstMachineSet := machineSets.Items[0]
+		g.Expect(*firstMachineSet.Spec.Replicas).To(BeEquivalentTo(2))
+		g.Expect(*firstMachineSet.Spec.Template.Spec.Version).To(BeEquivalentTo("v1.10.3"))
+
+		t.Log("Verify MachineSet has expected ClusterNameLabel and MachineDeploymentNameLabel")
+		g.Expect(firstMachineSet.Labels[clusterv1.ClusterNameLabel]).To(Equal(testCluster.Name))
+		g.Expect(firstMachineSet.Labels[clusterv1.MachineDeploymentNameLabel]).To(Equal(deployment.Name))
+
+		t.Log("Verify expected number of Machines are created")
 		machines := &clusterv1.MachineList{}
 		g.Eventually(func() int {
 			if err := env.List(ctx, machines, client.InNamespace(namespace.Name)); err != nil {
@@ -212,15 +239,12 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 			return len(machines.Items)
 		}, timeout).Should(BeEquivalentTo(*deployment.Spec.Replicas))
 
-		// Verify that machines has MachineSetLabelName and MachineDeploymentLabelName labels
-		t.Log("Verify machines have expected MachineSetLabelName and MachineDeploymentLabelName")
+		t.Log("Verify Machines have expected ClusterNameLabel, MachineDeploymentNameLabel and MachineSetNameLabel")
 		for _, m := range machines.Items {
-			g.Expect(m.Labels[clusterv1.ClusterLabelName]).To(Equal(testCluster.Name))
+			g.Expect(m.Labels[clusterv1.ClusterNameLabel]).To(Equal(testCluster.Name))
+			g.Expect(m.Labels[clusterv1.MachineDeploymentNameLabel]).To(Equal(deployment.Name))
+			g.Expect(m.Labels[clusterv1.MachineSetNameLabel]).To(Equal(firstMachineSet.Name))
 		}
-
-		firstMachineSet := machineSets.Items[0]
-		g.Expect(*firstMachineSet.Spec.Replicas).To(BeEquivalentTo(2))
-		g.Expect(*firstMachineSet.Spec.Template.Spec.Version).To(BeEquivalentTo("v1.10.3"))
 
 		//
 		// Delete firstMachineSet and expect Reconcile to be called to replace it.
@@ -244,7 +268,10 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 		//
 		secondMachineSet := machineSets.Items[0]
 		t.Log("Scaling the MachineDeployment to 3 replicas")
-		modifyFunc := func(d *clusterv1.MachineDeployment) { d.Spec.Replicas = pointer.Int32Ptr(3) }
+		desiredMachineDeploymentReplicas := int32(3)
+		modifyFunc := func(d *clusterv1.MachineDeployment) {
+			d.Spec.Replicas = ptr.To[int32](desiredMachineDeploymentReplicas)
+		}
 		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
 		g.Eventually(func() int {
 			key := client.ObjectKey{Name: secondMachineSet.Name, Namespace: secondMachineSet.Namespace}
@@ -252,13 +279,45 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 				return -1
 			}
 			return int(*secondMachineSet.Spec.Replicas)
-		}, timeout).Should(BeEquivalentTo(3))
+		}, timeout).Should(BeEquivalentTo(desiredMachineDeploymentReplicas))
 
 		//
-		// Update a MachineDeployment, expect Reconcile to be called and a new MachineSet to appear.
+		// Update the InfraStructureRef of the MachineDeployment, expect Reconcile to be called and a new MachineSet to appear.
 		//
-		t.Log("Setting a label on the MachineDeployment")
-		modifyFunc = func(d *clusterv1.MachineDeployment) { d.Spec.Template.Labels["updated"] = "true" }
+
+		t.Log("Updating the InfrastructureRef on the MachineDeployment")
+		// Create the InfrastructureTemplate
+		// Create infrastructure template resource.
+		infraTmpl2 := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"kind":       "GenericInfrastructureMachineTemplate",
+				"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+				"metadata": map[string]interface{}{
+					"name":      "md-template-2",
+					"namespace": namespace.Name,
+				},
+				"spec": map[string]interface{}{
+					"template": map[string]interface{}{
+						"kind":       "GenericInfrastructureMachine",
+						"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+						"metadata":   map[string]interface{}{},
+						"spec": map[string]interface{}{
+							"size": "5xlarge",
+						},
+					},
+				},
+			},
+		}
+		t.Log("Creating the infrastructure template")
+		g.Expect(env.Create(ctx, infraTmpl2)).To(Succeed())
+
+		infraTmpl2Ref := corev1.ObjectReference{
+			APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+			Kind:       "GenericInfrastructureMachineTemplate",
+			Name:       "md-template-2",
+			Namespace:  namespace.Name,
+		}
+		modifyFunc = func(d *clusterv1.MachineDeployment) { d.Spec.Template.Spec.InfrastructureRef = infraTmpl2Ref }
 		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
 		g.Eventually(func() int {
 			if err := env.List(ctx, machineSets, msListOpts...); err != nil {
@@ -267,20 +326,73 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 			return len(machineSets.Items)
 		}, timeout).Should(BeEquivalentTo(2))
 
-		t.Log("Updating deletePolicy on the MachineDeployment")
+		// Update the Labels of the MachineDeployment, expect Reconcile to be called and the MachineSet to be updated in-place.
+		t.Log("Setting a label on the MachineDeployment")
+		modifyFunc = func(d *clusterv1.MachineDeployment) { d.Spec.Template.Labels["updated"] = "true" }
+		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
+		g.Eventually(func(g Gomega) {
+			g.Expect(env.List(ctx, machineSets, msListOpts...)).To(Succeed())
+			// Verify we still only have 2 MachineSets.
+			g.Expect(machineSets.Items).To(HaveLen(2))
+			// Verify that the new MachineSet gets the updated labels.
+			g.Expect(machineSets.Items[0].Spec.Template.Labels).To(HaveKeyWithValue("updated", "true"))
+			// Verify that the old MachineSet does not get the updated labels.
+			g.Expect(machineSets.Items[1].Spec.Template.Labels).ShouldNot(HaveKeyWithValue("updated", "true"))
+		}, timeout).Should(Succeed())
+
+		// Update the NodeDrainTimout, NodeDeletionTimeout, NodeVolumeDetachTimeout of the MachineDeployment,
+		// expect the Reconcile to be called and the MachineSet to be updated in-place.
+		t.Log("Setting NodeDrainTimout, NodeDeletionTimeout, NodeVolumeDetachTimeout on the MachineDeployment")
+		duration10s := metav1.Duration{Duration: 10 * time.Second}
 		modifyFunc = func(d *clusterv1.MachineDeployment) {
-			d.Spec.Strategy.RollingUpdate.DeletePolicy = pointer.StringPtr("Newest")
+			d.Spec.Template.Spec.NodeDrainTimeout = &duration10s
+			d.Spec.Template.Spec.NodeDeletionTimeout = &duration10s
+			d.Spec.Template.Spec.NodeVolumeDetachTimeout = &duration10s
 		}
 		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
-		g.Eventually(func() string {
-			if err := env.List(ctx, machineSets, msListOpts...); err != nil {
-				return ""
-			}
-			return machineSets.Items[0].Spec.DeletePolicy
-		}, timeout).Should(Equal("Newest"))
+		g.Eventually(func(g Gomega) {
+			g.Expect(env.List(ctx, machineSets, msListOpts...)).Should(Succeed())
+			// Verify we still only have 2 MachineSets.
+			g.Expect(machineSets.Items).To(HaveLen(2))
+			// Verify the NodeDrainTimeout value is updated
+			g.Expect(machineSets.Items[0].Spec.Template.Spec.NodeDrainTimeout).Should(And(
+				Not(BeNil()),
+				HaveValue(Equal(duration10s)),
+			), "NodeDrainTimout value does not match expected")
+			// Verify the NodeDeletionTimeout value is updated
+			g.Expect(machineSets.Items[0].Spec.Template.Spec.NodeDeletionTimeout).Should(And(
+				Not(BeNil()),
+				HaveValue(Equal(duration10s)),
+			), "NodeDeletionTimeout value does not match expected")
+			// Verify the NodeVolumeDetachTimeout value is updated
+			g.Expect(machineSets.Items[0].Spec.Template.Spec.NodeVolumeDetachTimeout).Should(And(
+				Not(BeNil()),
+				HaveValue(Equal(duration10s)),
+			), "NodeVolumeDetachTimeout value does not match expected")
 
-		// Verify that the old machine set retains its delete policy
-		g.Expect(machineSets.Items[1].Spec.DeletePolicy).To(Equal("Oldest"))
+			// Verify that the old machine set keeps the old values.
+			g.Expect(machineSets.Items[1].Spec.Template.Spec.NodeDrainTimeout).Should(BeNil())
+			g.Expect(machineSets.Items[1].Spec.Template.Spec.NodeDeletionTimeout).Should(BeNil())
+			g.Expect(machineSets.Items[1].Spec.Template.Spec.NodeVolumeDetachTimeout).Should(BeNil())
+		}).Should(Succeed())
+
+		// Update the DeletePolicy of the MachineDeployment,
+		// expect the Reconcile to be called and the MachineSet to be updated in-place.
+		t.Log("Updating deletePolicy on the MachineDeployment")
+		modifyFunc = func(d *clusterv1.MachineDeployment) {
+			d.Spec.Strategy.RollingUpdate.DeletePolicy = ptr.To("Newest")
+		}
+		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
+		g.Eventually(func(g Gomega) {
+			g.Expect(env.List(ctx, machineSets, msListOpts...)).Should(Succeed())
+			// Verify we still only have 2 MachineSets.
+			g.Expect(machineSets.Items).To(HaveLen(2))
+			// Verify the DeletePolicy value is updated
+			g.Expect(machineSets.Items[0].Spec.DeletePolicy).Should(Equal("Newest"))
+
+			// Verify that the old machine set retains its delete policy
+			g.Expect(machineSets.Items[1].Spec.DeletePolicy).To(Equal("Oldest"))
+		}).Should(Succeed())
 
 		// Verify that all the MachineSets have the expected OwnerRef.
 		t.Log("Verifying MachineSet owner references")
@@ -288,7 +400,7 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 			if err := env.List(ctx, machineSets, msListOpts...); err != nil {
 				return false
 			}
-			for i := 0; i < len(machineSets.Items); i++ {
+			for range len(machineSets.Items) {
 				ms := machineSets.Items[0]
 				if !metav1.IsControlledBy(&ms, deployment) || metav1.GetControllerOf(&ms).Kind != "MachineDeployment" {
 					return false
@@ -298,15 +410,15 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 		}, timeout).Should(BeTrue())
 
 		t.Log("Locating the newest MachineSet")
-		var thirdMachineSet *clusterv1.MachineSet
+		var newestMachineSet *clusterv1.MachineSet
 		for i := range machineSets.Items {
 			ms := &machineSets.Items[i]
 			if ms.UID != secondMachineSet.UID {
-				thirdMachineSet = ms
+				newestMachineSet = ms
 				break
 			}
 		}
-		g.Expect(thirdMachineSet).NotTo(BeNil())
+		g.Expect(newestMachineSet).NotTo(BeNil())
 
 		t.Log("Verifying the initial MachineSet is deleted")
 		g.Eventually(func() int {
@@ -314,14 +426,14 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 			// to properly set AvailableReplicas.
 			foundMachines := &clusterv1.MachineList{}
 			g.Expect(env.List(ctx, foundMachines, client.InNamespace(namespace.Name))).To(Succeed())
-			for i := 0; i < len(foundMachines.Items); i++ {
+			for i := range len(foundMachines.Items) {
 				m := foundMachines.Items[i]
 				// Skip over deleted Machines
 				if !m.DeletionTimestamp.IsZero() {
 					continue
 				}
 				// Skip over Machines controlled by other (previous) MachineSets
-				if !metav1.IsControlledBy(&m, thirdMachineSet) {
+				if !metav1.IsControlledBy(&m, newestMachineSet) {
 					continue
 				}
 				providerID := fakeInfrastructureRefReady(m.Spec.InfrastructureRef, infraResource, g)
@@ -334,43 +446,15 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 			return len(machineSets.Items)
 		}, timeout*3).Should(BeEquivalentTo(1))
 
-		//
-		// Update a MachineDeployment spec.Selector.Matchlabels spec.Template.Labels
-		// expect Reconcile to be called and a new MachineSet to appear
-		// expect old MachineSets with old labels to be deleted
-		//
-		oldLabels := deployment.Spec.Selector.MatchLabels
-		oldLabels[clusterv1.MachineDeploymentLabelName] = deployment.Name
-
-		newLabels := map[string]string{
-			"new-key":                  "new-value",
-			clusterv1.ClusterLabelName: testCluster.Name,
-		}
-
-		t.Log("Updating MachineDeployment label")
-		modifyFunc = func(d *clusterv1.MachineDeployment) {
-			d.Spec.Selector.MatchLabels = newLabels
-			d.Spec.Template.Labels = newLabels
-		}
-		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
-
-		t.Log("Verifying if a new MachineSet with updated labels are created")
-		g.Eventually(func() int {
-			listOpts := client.MatchingLabels(newLabels)
-			if err := env.List(ctx, machineSets, listOpts); err != nil {
-				return -1
-			}
-			return len(machineSets.Items)
-		}, timeout).Should(BeEquivalentTo(1))
-		newms := machineSets.Items[0]
-
 		t.Log("Verifying new MachineSet has desired number of replicas")
 		g.Eventually(func() bool {
+			g.Expect(env.List(ctx, machineSets, msListOpts...)).Should(Succeed())
+			newms := machineSets.Items[0]
 			// Set the all non-deleted machines as ready with a NodeRef, so the MachineSet controller can proceed
 			// to properly set AvailableReplicas.
 			foundMachines := &clusterv1.MachineList{}
 			g.Expect(env.List(ctx, foundMachines, client.InNamespace(namespace.Name))).To(Succeed())
-			for i := 0; i < len(foundMachines.Items); i++ {
+			for i := range len(foundMachines.Items) {
 				m := foundMachines.Items[i]
 				if !m.DeletionTimestamp.IsZero() {
 					continue
@@ -383,22 +467,8 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 				fakeMachineNodeRef(&m, providerID, g)
 			}
 
-			listOpts := client.MatchingLabels(newLabels)
-			if err := env.List(ctx, machineSets, listOpts); err != nil {
-				return false
-			}
-			return machineSets.Items[0].Status.Replicas == *deployment.Spec.Replicas
+			return newms.Status.Replicas == desiredMachineDeploymentReplicas
 		}, timeout*5).Should(BeTrue())
-
-		t.Log("Verifying MachineSets with old labels are deleted")
-		g.Eventually(func() int {
-			listOpts := client.MatchingLabels(oldLabels)
-			if err := env.List(ctx, machineSets, listOpts); err != nil {
-				return -1
-			}
-
-			return len(machineSets.Items)
-		}, timeout*5).Should(BeEquivalentTo(0))
 
 		t.Log("Verifying MachineDeployment has correct Conditions")
 		g.Eventually(func() bool {
@@ -410,6 +480,185 @@ func TestMachineDeploymentReconciler(t *testing.T) {
 		// Validate that the controller set the cluster name label in selector.
 		g.Expect(deployment.Status.Selector).To(ContainSubstring(testCluster.Name))
 	})
+}
+
+func TestMachineDeploymentReconciler_CleanUpManagedFieldsForSSAAdoption(t *testing.T) {
+	setup := func(t *testing.T, g *WithT) (*corev1.Namespace, *clusterv1.Cluster) {
+		t.Helper()
+
+		t.Log("Creating the namespace")
+		ns, err := env.CreateNamespace(ctx, machineDeploymentNamespace)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		t.Log("Creating the Cluster")
+		cluster := &clusterv1.Cluster{ObjectMeta: metav1.ObjectMeta{Namespace: ns.Name, Name: "test-cluster"}}
+		g.Expect(env.Create(ctx, cluster)).To(Succeed())
+
+		t.Log("Creating the Cluster Kubeconfig Secret")
+		g.Expect(env.CreateKubeconfigSecret(ctx, cluster)).To(Succeed())
+
+		return ns, cluster
+	}
+
+	teardown := func(t *testing.T, g *WithT, ns *corev1.Namespace, cluster *clusterv1.Cluster) {
+		t.Helper()
+
+		t.Log("Deleting the Cluster")
+		g.Expect(env.Delete(ctx, cluster)).To(Succeed())
+		t.Log("Deleting the namespace")
+		g.Expect(env.Delete(ctx, ns)).To(Succeed())
+	}
+
+	g := NewWithT(t)
+	namespace, testCluster := setup(t, g)
+	defer teardown(t, g, namespace, testCluster)
+
+	labels := map[string]string{
+		"foo":                      "bar",
+		clusterv1.ClusterNameLabel: testCluster.Name,
+	}
+	version := "v1.10.3"
+	deployment := &clusterv1.MachineDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "md-",
+			Namespace:    namespace.Name,
+			Labels: map[string]string{
+				clusterv1.ClusterNameLabel: testCluster.Name,
+			},
+		},
+		Spec: clusterv1.MachineDeploymentSpec{
+			Paused:               true, // Set this to true as we do not want to test the other parts of the reconciler in this test.
+			ClusterName:          testCluster.Name,
+			MinReadySeconds:      ptr.To[int32](0),
+			Replicas:             ptr.To[int32](2),
+			RevisionHistoryLimit: ptr.To[int32](0),
+			Selector: metav1.LabelSelector{
+				// We're using the same labels for spec.selector and spec.template.labels.
+				MatchLabels: labels,
+			},
+			Strategy: &clusterv1.MachineDeploymentStrategy{
+				Type: clusterv1.RollingUpdateMachineDeploymentStrategyType,
+				RollingUpdate: &clusterv1.MachineRollingUpdateDeployment{
+					MaxUnavailable: intOrStrPtr(0),
+					MaxSurge:       intOrStrPtr(1),
+					DeletePolicy:   ptr.To("Oldest"),
+				},
+			},
+			Template: clusterv1.MachineTemplateSpec{
+				ObjectMeta: clusterv1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: clusterv1.MachineSpec{
+					ClusterName: testCluster.Name,
+					Version:     &version,
+					InfrastructureRef: corev1.ObjectReference{
+						APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+						Kind:       "GenericInfrastructureMachineTemplate",
+						Name:       "md-template",
+						Namespace:  namespace.Name,
+					},
+					Bootstrap: clusterv1.Bootstrap{
+						DataSecretName: ptr.To("data-secret-name"),
+					},
+				},
+			},
+		},
+	}
+	msListOpts := []client.ListOption{
+		client.InNamespace(namespace.Name),
+		client.MatchingLabels(labels),
+	}
+
+	// Create infrastructure template resource.
+	infraResource := map[string]interface{}{
+		"kind":       "GenericInfrastructureMachine",
+		"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+		"metadata":   map[string]interface{}{},
+		"spec": map[string]interface{}{
+			"size": "3xlarge",
+		},
+	}
+	infraTmpl := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"kind":       "GenericInfrastructureMachineTemplate",
+			"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+			"metadata": map[string]interface{}{
+				"name":      "md-template",
+				"namespace": namespace.Name,
+			},
+			"spec": map[string]interface{}{
+				"template": infraResource,
+			},
+		},
+	}
+	t.Log("Creating the infrastructure template")
+	g.Expect(env.Create(ctx, infraTmpl)).To(Succeed())
+
+	// Create the MachineDeployment object and expect Reconcile to be called.
+	t.Log("Creating the MachineDeployment")
+	g.Expect(env.Create(ctx, deployment)).To(Succeed())
+
+	// Create a MachineSet for the MachineDeployment.
+	classicManagerMS := &clusterv1.MachineSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MachineSet",
+			APIVersion: clusterv1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deployment.Name + "-" + "classic-ms",
+			Namespace: testCluster.Namespace,
+			Labels:    labels,
+		},
+		Spec: clusterv1.MachineSetSpec{
+			ClusterName:     testCluster.Name,
+			Replicas:        ptr.To[int32](0),
+			MinReadySeconds: 0,
+			Selector: metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: clusterv1.MachineTemplateSpec{
+				ObjectMeta: clusterv1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: clusterv1.MachineSpec{
+					ClusterName: testCluster.Name,
+					InfrastructureRef: corev1.ObjectReference{
+						APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+						Kind:       "GenericInfrastructureMachineTemplate",
+						Name:       "md-template",
+						Namespace:  testCluster.Namespace,
+					},
+					Bootstrap: clusterv1.Bootstrap{
+						DataSecretName: ptr.To("data-secret-name"),
+					},
+					Version: &version,
+				},
+			},
+		},
+	}
+	ssaManagerMS := classicManagerMS.DeepCopy()
+	ssaManagerMS.Name = deployment.Name + "-" + "ssa-ms"
+
+	// Create one using the "old manager".
+	g.Expect(env.Create(ctx, classicManagerMS, client.FieldOwner("manager"))).To(Succeed())
+
+	// Create one using SSA.
+	g.Expect(env.Patch(ctx, ssaManagerMS, client.Apply, client.FieldOwner(machineDeploymentManagerName), client.ForceOwnership)).To(Succeed())
+
+	// Verify that for both the MachineSets the ManagedFields are updated.
+	g.Eventually(func(g Gomega) {
+		machineSets := &clusterv1.MachineSetList{}
+		g.Expect(env.List(ctx, machineSets, msListOpts...)).To(Succeed())
+
+		g.Expect(machineSets.Items).To(HaveLen(2))
+		for _, ms := range machineSets.Items {
+			// Verify the ManagedFields are updated.
+			g.Expect(ms.GetManagedFields()).Should(
+				ContainElement(ssa.MatchManagedFieldsEntry(machineDeploymentManagerName, metav1.ManagedFieldsOperationApply)))
+			g.Expect(ms.GetManagedFields()).ShouldNot(
+				ContainElement(ssa.MatchManagedFieldsEntry("manager", metav1.ManagedFieldsOperationUpdate)))
+		}
+	}).Should(Succeed())
 }
 
 func TestMachineSetToDeployments(t *testing.T) {
@@ -424,7 +673,7 @@ func TestMachineSetToDeployments(t *testing.T) {
 			Selector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"foo":                      "bar",
-					clusterv1.ClusterLabelName: "test-cluster",
+					clusterv1.ClusterNameLabel: "test-cluster",
 				},
 			},
 		},
@@ -443,7 +692,7 @@ func TestMachineSetToDeployments(t *testing.T) {
 				*metav1.NewControllerRef(machineDeployment, machineDeploymentKind),
 			},
 			Labels: map[string]string{
-				clusterv1.ClusterLabelName: "test-cluster",
+				clusterv1.ClusterNameLabel: "test-cluster",
 			},
 		},
 	}
@@ -455,7 +704,7 @@ func TestMachineSetToDeployments(t *testing.T) {
 			Name:      "noOwnerRefNoLabels",
 			Namespace: metav1.NamespaceDefault,
 			Labels: map[string]string{
-				clusterv1.ClusterLabelName: "test-cluster",
+				clusterv1.ClusterNameLabel: "test-cluster",
 			},
 		},
 	}
@@ -468,7 +717,7 @@ func TestMachineSetToDeployments(t *testing.T) {
 			Namespace: metav1.NamespaceDefault,
 			Labels: map[string]string{
 				"foo":                      "bar",
-				clusterv1.ClusterLabelName: "test-cluster",
+				clusterv1.ClusterNameLabel: "test-cluster",
 			},
 		},
 	}
@@ -503,8 +752,8 @@ func TestMachineSetToDeployments(t *testing.T) {
 	}
 
 	for _, tc := range testsCases {
-		got := r.MachineSetToDeployments(tc.mapObject)
-		g.Expect(got).To(Equal(tc.expected))
+		got := r.MachineSetToDeployments(ctx, tc.mapObject)
+		g.Expect(got).To(BeComparableTo(tc.expected))
 	}
 }
 
@@ -567,12 +816,13 @@ func TestGetMachineDeploymentsForMachineSet(t *testing.T) {
 		recorder: record.NewFakeRecorder(32),
 	}
 
-	for _, tc := range testCases {
+	for i := range testCases {
+		tc := testCases[i]
 		var got []client.Object
 		for _, x := range r.getMachineDeploymentsForMachineSet(ctx, &tc.machineSet) {
 			got = append(got, x)
 		}
-		g.Expect(got).To(Equal(tc.expected))
+		g.Expect(got).To(BeComparableTo(tc.expected))
 	}
 }
 
@@ -716,7 +966,8 @@ func TestGetMachineSetsForDeployment(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
+	for i := range testCases {
+		tc := testCases[i]
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 
@@ -725,14 +976,521 @@ func TestGetMachineSetsForDeployment(t *testing.T) {
 				recorder: record.NewFakeRecorder(32),
 			}
 
-			got, err := r.getMachineSetsForDeployment(ctx, &tc.machineDeployment)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(got).To(HaveLen(len(tc.expected)))
+			s := &scope{
+				machineDeployment: &tc.machineDeployment,
+			}
+			err := r.getAndAdoptMachineSetsForDeployment(ctx, s)
+			g.Expect(err).ToNot(HaveOccurred())
 
-			for idx, res := range got {
+			g.Expect(s.machineSets).To(HaveLen(len(tc.expected)))
+			for idx, res := range s.machineSets {
 				g.Expect(res.Name).To(Equal(tc.expected[idx].Name))
 				g.Expect(res.Namespace).To(Equal(tc.expected[idx].Namespace))
 			}
+		})
+	}
+}
+
+// We have this as standalone variant to be able to use it from the tests.
+func updateMachineDeployment(ctx context.Context, c client.Client, md *clusterv1.MachineDeployment, modify func(*clusterv1.MachineDeployment)) error {
+	mdObjectKey := util.ObjectKey(md)
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		// Note: We intentionally don't re-use the passed in MachineDeployment md here as that would
+		// overwrite any local changes we might have previously made to the MachineDeployment with the version
+		// we get here from the apiserver.
+		md := &clusterv1.MachineDeployment{}
+		if err := c.Get(ctx, mdObjectKey, md); err != nil {
+			return err
+		}
+		patchHelper, err := patch.NewHelper(md, c)
+		if err != nil {
+			return err
+		}
+		modify(md)
+		return patchHelper.Patch(ctx, md)
+	})
+}
+
+func TestMachineDeploymentReconcilerInPlace(t *testing.T) {
+	setup := func(t *testing.T, g *WithT) (*corev1.Namespace, *clusterv1.Cluster) {
+		t.Helper()
+
+		t.Log("Creating the namespace")
+		ns, err := env.CreateNamespace(ctx, machineDeploymentNamespace)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		t.Log("Creating the Cluster")
+		cluster := &clusterv1.Cluster{ObjectMeta: metav1.ObjectMeta{Namespace: ns.Name, Name: "test-cluster"}}
+		g.Expect(env.Create(ctx, cluster)).To(Succeed())
+
+		t.Log("Creating the Cluster Kubeconfig Secret")
+		g.Expect(env.CreateKubeconfigSecret(ctx, cluster)).To(Succeed())
+
+		return ns, cluster
+	}
+
+	teardown := func(t *testing.T, g *WithT, ns *corev1.Namespace, cluster *clusterv1.Cluster) {
+		t.Helper()
+
+		t.Log("Deleting the Cluster")
+		g.Expect(env.Delete(ctx, cluster)).To(Succeed())
+		t.Log("Deleting the namespace")
+		g.Expect(env.Delete(ctx, ns)).To(Succeed())
+	}
+
+	t.Run("Should reconcile a MachineDeployment with InPlace upgrade", func(t *testing.T) {
+		g := NewWithT(t)
+		namespace, testCluster := setup(t, g)
+		defer teardown(t, g, namespace, testCluster)
+
+		labels := map[string]string{
+			"foo":                      "bar",
+			clusterv1.ClusterNameLabel: testCluster.Name,
+		}
+		deployment := &clusterv1.MachineDeployment{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "md-",
+				Namespace:    namespace.Name,
+				Labels: map[string]string{
+					clusterv1.ClusterNameLabel: testCluster.Name,
+				},
+			},
+			Spec: clusterv1.MachineDeploymentSpec{
+				ClusterName:          testCluster.Name,
+				MinReadySeconds:      pointer.Int32(0),
+				Replicas:             pointer.Int32(2),
+				RevisionHistoryLimit: pointer.Int32(0),
+				Selector: metav1.LabelSelector{
+					// We're using the same labels for spec.selector and spec.template.labels.
+					// The labels are later changed and we will use the initial labels later to
+					// verify that all original MachineSets have been deleted.
+					MatchLabels: labels,
+				},
+				Strategy: &clusterv1.MachineDeploymentStrategy{
+					Type: clusterv1.InPlaceMachineDeploymentStrategyType,
+				},
+				Template: clusterv1.MachineTemplateSpec{
+					ObjectMeta: clusterv1.ObjectMeta{
+						Labels: labels,
+					},
+					Spec: clusterv1.MachineSpec{
+						ClusterName: testCluster.Name,
+						Version:     pointer.String(version128),
+						InfrastructureRef: corev1.ObjectReference{
+							APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+							Kind:       "GenericInfrastructureMachineTemplate",
+							Name:       "md-template",
+						},
+						Bootstrap: clusterv1.Bootstrap{
+							DataSecretName: pointer.String("data-secret-name"),
+						},
+					},
+				},
+			},
+		}
+		msListOpts := []client.ListOption{
+			client.InNamespace(namespace.Name),
+			client.MatchingLabels(labels),
+		}
+
+		// Create infrastructure template resource.
+		infraResource := map[string]interface{}{
+			"kind":       "GenericInfrastructureMachine",
+			"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+			"metadata":   map[string]interface{}{},
+			"spec": map[string]interface{}{
+				"size": "3xlarge",
+			},
+		}
+		infraTmpl := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"kind":       "GenericInfrastructureMachineTemplate",
+				"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+				"metadata": map[string]interface{}{
+					"name":      "md-template",
+					"namespace": namespace.Name,
+				},
+				"spec": map[string]interface{}{
+					"template": infraResource,
+				},
+			},
+		}
+		t.Log("Creating the infrastructure template")
+		g.Expect(env.Create(ctx, infraTmpl)).To(Succeed())
+
+		// Create the MachineDeployment object and expect Reconcile to be called.
+		t.Log("Creating the MachineDeployment")
+		g.Expect(env.Create(ctx, deployment)).To(Succeed())
+		defer func() {
+			t.Log("Deleting the MachineDeployment")
+			g.Expect(env.Delete(ctx, deployment)).To(Succeed())
+		}()
+
+		t.Log("Verifying the MachineDeployment has a cluster label and ownerRef")
+		g.Eventually(func() bool {
+			key := client.ObjectKey{Name: deployment.Name, Namespace: deployment.Namespace}
+			if err := env.Get(ctx, key, deployment); err != nil {
+				return false
+			}
+			if len(deployment.Labels) == 0 || deployment.Labels[clusterv1.ClusterNameLabel] != testCluster.Name {
+				return false
+			}
+			if len(deployment.OwnerReferences) == 0 || deployment.OwnerReferences[0].Name != testCluster.Name {
+				return false
+			}
+			return true
+		}, timeout).Should(BeTrue())
+
+		// Verify that the MachineSet was created.
+		t.Log("Verifying the MachineSet was created")
+		machineSets := &clusterv1.MachineSetList{}
+		g.Eventually(func() int {
+			if err := env.List(ctx, machineSets, msListOpts...); err != nil {
+				return -1
+			}
+			return len(machineSets.Items)
+		}, timeout).Should(BeEquivalentTo(1))
+
+		t.Log("Verifying the linked infrastructure template has a cluster owner reference")
+		g.Eventually(func() bool {
+			obj, err := external.Get(ctx, env, &deployment.Spec.Template.Spec.InfrastructureRef, deployment.Namespace)
+			if err != nil {
+				return false
+			}
+
+			return util.HasOwnerRef(obj.GetOwnerReferences(), metav1.OwnerReference{
+				APIVersion: clusterv1.GroupVersion.String(),
+				Kind:       "Cluster",
+				Name:       testCluster.Name,
+				UID:        testCluster.UID,
+			})
+		}, timeout).Should(BeTrue())
+
+		t.Log("Verify MachineSet has expected replicas and version")
+		firstMachineSet := machineSets.Items[0]
+		g.Expect(*firstMachineSet.Spec.Replicas).To(BeEquivalentTo(2))
+		g.Expect(*firstMachineSet.Spec.Template.Spec.Version).To(BeEquivalentTo(version128))
+
+		t.Log("Verify MachineSet has expected ClusterNameLabel and MachineDeploymentNameLabel")
+		g.Expect(firstMachineSet.Labels[clusterv1.ClusterNameLabel]).To(Equal(testCluster.Name))
+		g.Expect(firstMachineSet.Labels[clusterv1.MachineDeploymentNameLabel]).To(Equal(deployment.Name))
+
+		t.Log("Verify expected number of Machines are created")
+		machines := &clusterv1.MachineList{}
+		g.Eventually(func() int {
+			if err := env.List(ctx, machines, client.InNamespace(namespace.Name)); err != nil {
+				return -1
+			}
+			return len(machines.Items)
+		}, timeout).Should(BeEquivalentTo(*deployment.Spec.Replicas))
+
+		t.Log("Verify Machines have expected ClusterNameLabel, MachineDeploymentNameLabel and MachineSetNameLabel")
+		for _, m := range machines.Items {
+			g.Expect(m.Labels[clusterv1.ClusterNameLabel]).To(Equal(testCluster.Name))
+			g.Expect(m.Labels[clusterv1.MachineDeploymentNameLabel]).To(Equal(deployment.Name))
+			g.Expect(m.Labels[clusterv1.MachineSetNameLabel]).To(Equal(firstMachineSet.Name))
+		}
+
+		//
+		// Delete firstMachineSet and expect Reconcile to be called to replace it.
+		//
+		t.Log("Deleting the initial MachineSet")
+		g.Expect(env.Delete(ctx, &firstMachineSet)).To(Succeed())
+		g.Eventually(func() bool {
+			if err := env.List(ctx, machineSets, msListOpts...); err != nil {
+				return false
+			}
+			for _, ms := range machineSets.Items {
+				if ms.UID == firstMachineSet.UID {
+					return false
+				}
+			}
+			return len(machineSets.Items) > 0
+		}, timeout).Should(BeTrue())
+
+		//
+		// Scale the MachineDeployment and expect Reconcile to be called.
+		//
+		secondMachineSet := machineSets.Items[0]
+		t.Log("Scaling the MachineDeployment to 3 replicas")
+		desiredMachineDeploymentReplicas := int32(3)
+		modifyFunc := func(d *clusterv1.MachineDeployment) {
+			d.Spec.Replicas = pointer.Int32(desiredMachineDeploymentReplicas)
+		}
+		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
+		g.Eventually(func() int {
+			key := client.ObjectKey{Name: secondMachineSet.Name, Namespace: secondMachineSet.Namespace}
+			if err := env.Get(ctx, key, &secondMachineSet); err != nil {
+				return -1
+			}
+			return int(*secondMachineSet.Spec.Replicas)
+		}, timeout).Should(BeEquivalentTo(desiredMachineDeploymentReplicas))
+
+		//
+		// Update the InfraStructureRef of the MachineDeployment, expect Reconcile to be called and a new MachineSet to appear.
+		//
+
+		t.Log("Updating the InfrastructureRef on the MachineDeployment")
+		// Create the InfrastructureTemplate
+		// Create infrastructure template resource.
+		infraTmpl2 := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"kind":       "GenericInfrastructureMachineTemplate",
+				"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+				"metadata": map[string]interface{}{
+					"name":      "md-template-2",
+					"namespace": namespace.Name,
+				},
+				"spec": map[string]interface{}{
+					"template": map[string]interface{}{
+						"kind":       "GenericInfrastructureMachine",
+						"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
+						"metadata":   map[string]interface{}{},
+						"spec": map[string]interface{}{
+							"size": "5xlarge",
+						},
+					},
+				},
+			},
+		}
+		t.Log("Creating the infrastructure template")
+		g.Expect(env.Create(ctx, infraTmpl2)).To(Succeed())
+
+		infraTmpl2Ref := corev1.ObjectReference{
+			APIVersion: "infrastructure.cluster.x-k8s.io/v1beta1",
+			Kind:       "GenericInfrastructureMachineTemplate",
+			Name:       "md-template-2",
+		}
+		modifyFunc = func(d *clusterv1.MachineDeployment) { d.Spec.Template.Spec.InfrastructureRef = infraTmpl2Ref }
+		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
+		g.Eventually(func() int {
+			if err := env.List(ctx, machineSets, msListOpts...); err != nil {
+				return -1
+			}
+			return len(machineSets.Items)
+		}, timeout).Should(BeEquivalentTo(1))
+
+		// Expect InPlace annotation to be added to the MD object.
+		g.Eventually(func() bool {
+			md := &clusterv1.MachineDeployment{}
+			if err := env.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, md); err != nil {
+				return false
+			}
+			return annotations.HasAnnotation(md, clusterv1.MachineDeploymentInPlaceUpgradeAnnotation)
+		}, timeout).Should(BeTrue())
+
+		t.Log("Setting MachineSet template to match MachineDeployment template and removing the in-place annotation")
+		md := &clusterv1.MachineDeployment{}
+		g.Expect(env.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, md)).To(Succeed())
+		ms := machineSets.Items[0]
+		patchHelper, err := patch.NewHelper(&ms, env)
+		g.Expect(err).ToNot(HaveOccurred())
+		ms.Spec.Template.Spec = md.Spec.Template.Spec
+		g.Expect(patchHelper.Patch(ctx, &ms)).To(Succeed())
+
+		modifyFunc = func(d *clusterv1.MachineDeployment) {
+			delete(d.Annotations, clusterv1.MachineDeploymentInPlaceUpgradeAnnotation)
+		}
+		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
+		g.Eventually(func() map[string]string {
+			md := &clusterv1.MachineDeployment{}
+			if err := env.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, md); err != nil {
+				return nil
+			}
+			return md.Annotations
+		}, timeout).ShouldNot(HaveKey(clusterv1.MachineDeploymentInPlaceUpgradeAnnotation))
+		g.Eventually(func() int32 {
+			md := &clusterv1.MachineDeployment{}
+			if err := env.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, md); err != nil {
+				return -1
+			}
+			return md.Status.UpdatedReplicas
+		}, timeout).Should(BeEquivalentTo(*md.Spec.Replicas))
+
+		// Update the Labels of the MachineDeployment, expect Reconcile to be called and the MachineSet to be updated in-place.
+		t.Log("Setting a label on the MachineDeployment")
+		modifyFunc = func(d *clusterv1.MachineDeployment) { d.Spec.Template.Labels["updated"] = "true" }
+		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
+		g.Eventually(func(g Gomega) {
+			g.Expect(env.List(ctx, machineSets, msListOpts...)).To(Succeed())
+			// Verify we still only have 1 MachineSet.
+			g.Expect(machineSets.Items).To(HaveLen(1))
+			// Verify that the new MachineSet gets the updated labels.
+			g.Expect(machineSets.Items[0].Spec.Template.Labels).To(HaveKeyWithValue("updated", "true"))
+		}, timeout).Should(Succeed())
+
+		// Update the NodeDrainTimout, NodeDeletionTimeout, NodeVolumeDetachTimeout of the MachineDeployment,
+		// expect the Reconcile to be called and the MachineSet to be updated in-place.
+		t.Log("Setting NodeDrainTimout, NodeDeletionTimeout, NodeVolumeDetachTimeout on the MachineDeployment")
+		duration10s := metav1.Duration{Duration: 10 * time.Second}
+		modifyFunc = func(d *clusterv1.MachineDeployment) {
+			d.Spec.Template.Spec.NodeDrainTimeout = &duration10s
+			d.Spec.Template.Spec.NodeDeletionTimeout = &duration10s
+			d.Spec.Template.Spec.NodeVolumeDetachTimeout = &duration10s
+		}
+		g.Expect(updateMachineDeployment(ctx, env, deployment, modifyFunc)).To(Succeed())
+		g.Eventually(func(g Gomega) {
+			g.Expect(env.List(ctx, machineSets, msListOpts...)).Should(Succeed())
+			// Verify we still only have 1 MachineSets.
+			g.Expect(machineSets.Items).To(HaveLen(1))
+			// Verify the NodeDrainTimeout value is updated
+			g.Expect(machineSets.Items[0].Spec.Template.Spec.NodeDrainTimeout).Should(And(
+				Not(BeNil()),
+				HaveValue(Equal(duration10s)),
+			), "NodeDrainTimout value does not match expected")
+			// Verify the NodeDeletionTimeout value is updated
+			g.Expect(machineSets.Items[0].Spec.Template.Spec.NodeDeletionTimeout).Should(And(
+				Not(BeNil()),
+				HaveValue(Equal(duration10s)),
+			), "NodeDeletionTimeout value does not match expected")
+			// Verify the NodeVolumeDetachTimeout value is updated
+			g.Expect(machineSets.Items[0].Spec.Template.Spec.NodeVolumeDetachTimeout).Should(And(
+				Not(BeNil()),
+				HaveValue(Equal(duration10s)),
+			), "NodeVolumeDetachTimeout value does not match expected")
+		}).Should(Succeed())
+
+		// Verify that all the MachineSets have the expected OwnerRef.
+		t.Log("Verifying MachineSet owner references")
+		g.Eventually(func() bool {
+			if err := env.List(ctx, machineSets, msListOpts...); err != nil {
+				return false
+			}
+			for i := 0; i < len(machineSets.Items); i++ {
+				ms := machineSets.Items[0]
+				if !metav1.IsControlledBy(&ms, deployment) || metav1.GetControllerOf(&ms).Kind != "MachineDeployment" {
+					return false
+				}
+			}
+			return true
+		}, timeout).Should(BeTrue())
+
+		t.Log("Locating the newest MachineSet")
+		newestMachineSet := &machineSets.Items[0]
+		g.Expect(newestMachineSet).NotTo(BeNil())
+
+		t.Log("Verifying new MachineSet has desired number of replicas")
+		g.Eventually(func() bool {
+			g.Expect(env.List(ctx, machineSets, msListOpts...)).Should(Succeed())
+			newms := machineSets.Items[0]
+			// Set the all non-deleted machines as ready with a NodeRef, so the MachineSet controller can proceed
+			// to properly set AvailableReplicas.
+			foundMachines := &clusterv1.MachineList{}
+			g.Expect(env.List(ctx, foundMachines, client.InNamespace(namespace.Name))).To(Succeed())
+			for i := 0; i < len(foundMachines.Items); i++ {
+				m := foundMachines.Items[i]
+				if !m.DeletionTimestamp.IsZero() {
+					continue
+				}
+				// Skip over Machines controlled by other (previous) MachineSets
+				if !metav1.IsControlledBy(&m, &newms) {
+					continue
+				}
+				providerID := fakeInfrastructureRefReady(m.Spec.InfrastructureRef, infraResource, g)
+				fakeMachineNodeRef(&m, providerID, g)
+			}
+
+			return newms.Status.Replicas == desiredMachineDeploymentReplicas
+		}, timeout*5).Should(BeTrue())
+
+		t.Log("Verifying MachineDeployment has correct Conditions")
+		g.Eventually(func() bool {
+			key := client.ObjectKey{Name: deployment.Name, Namespace: deployment.Namespace}
+			g.Expect(env.Get(ctx, key, deployment)).To(Succeed())
+			return conditions.IsTrue(deployment, clusterv1.MachineDeploymentAvailableCondition)
+		}, timeout).Should(BeTrue())
+
+		// Validate that the controller set the cluster name label in selector.
+		g.Expect(deployment.Status.Selector).To(ContainSubstring(testCluster.Name))
+	})
+}
+
+func TestReconciler_reconcileDelete(t *testing.T) {
+	labels := map[string]string{
+		"some": "labelselector",
+	}
+	md := builder.MachineDeployment("default", "md0").WithClusterName("test").Build()
+	md.Finalizers = []string{
+		clusterv1.MachineDeploymentFinalizer,
+	}
+	md.DeletionTimestamp = ptr.To(metav1.Now())
+	md.Spec.Selector = metav1.LabelSelector{
+		MatchLabels: labels,
+	}
+	mdWithoutFinalizer := md.DeepCopy()
+	mdWithoutFinalizer.Finalizers = []string{}
+	tests := []struct {
+		name              string
+		machineDeployment *clusterv1.MachineDeployment
+		want              *clusterv1.MachineDeployment
+		objs              []client.Object
+		wantMachineSets   []clusterv1.MachineSet
+		expectError       bool
+	}{
+		{
+			name:              "Should do nothing when no descendant MachineSets exist and finalizer is already gone",
+			machineDeployment: mdWithoutFinalizer.DeepCopy(),
+			want:              mdWithoutFinalizer.DeepCopy(),
+			objs:              nil,
+			wantMachineSets:   nil,
+			expectError:       false,
+		},
+		{
+			name:              "Should remove finalizer when no descendant MachineSets exist",
+			machineDeployment: md.DeepCopy(),
+			want:              mdWithoutFinalizer.DeepCopy(),
+			objs:              nil,
+			wantMachineSets:   nil,
+			expectError:       false,
+		},
+		{
+			name:              "Should keep finalizer when descendant MachineSets exist and trigger deletion only for descendant MachineSets",
+			machineDeployment: md.DeepCopy(),
+			want:              md.DeepCopy(),
+			objs: []client.Object{
+				builder.MachineSet("default", "ms0").WithClusterName("test").WithLabels(labels).Build(),
+				builder.MachineSet("default", "ms1").WithClusterName("test").WithLabels(labels).Build(),
+				builder.MachineSet("default", "ms2-not-part-of-md").WithClusterName("test").Build(),
+				builder.MachineSet("default", "ms3-not-part-of-md").WithClusterName("test").Build(),
+			},
+			wantMachineSets: []clusterv1.MachineSet{
+				*builder.MachineSet("default", "ms2-not-part-of-md").WithClusterName("test").Build(),
+				*builder.MachineSet("default", "ms3-not-part-of-md").WithClusterName("test").Build(),
+			},
+			expectError: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := fake.NewClientBuilder().WithObjects(tt.objs...).Build()
+			r := &Reconciler{
+				Client:   c,
+				recorder: record.NewFakeRecorder(32),
+			}
+
+			s := &scope{
+				machineDeployment: tt.machineDeployment,
+			}
+			err := r.reconcileDelete(ctx, s)
+			if tt.expectError {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			g.Expect(tt.machineDeployment).To(BeComparableTo(tt.want))
+
+			machineSetList := &clusterv1.MachineSetList{}
+			g.Expect(c.List(ctx, machineSetList, client.InNamespace("default"))).ToNot(HaveOccurred())
+
+			// Remove ResourceVersion so we can actually compare.
+			for i := range machineSetList.Items {
+				machineSetList.Items[i].ResourceVersion = ""
+			}
+
+			g.Expect(machineSetList.Items).To(ConsistOf(tt.wantMachineSets))
 		})
 	}
 }

@@ -19,16 +19,17 @@ package predicates
 
 import (
 	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// ResourceCreate returns a predicate that returns true for a create event.
-func ResourceCreate(logger logr.Logger) predicate.Funcs {
-	return predicate.Funcs{
-		CreateFunc:  func(e event.CreateEvent) bool { return true },
-		UpdateFunc:  func(e event.UpdateEvent) bool { return false },
-		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-		GenericFunc: func(e event.GenericEvent) bool { return false },
+// TypedResourceCreateOrUpdate returns a predicate that returns true for create and update events.
+func TypedResourceCreateOrUpdate[T client.Object](_ logr.Logger) predicate.TypedFuncs[T] {
+	return predicate.TypedFuncs[T]{
+		CreateFunc:  func(event.TypedCreateEvent[T]) bool { return true },
+		UpdateFunc:  func(event.TypedUpdateEvent[T]) bool { return true },
+		DeleteFunc:  func(event.TypedDeleteEvent[T]) bool { return false },
+		GenericFunc: func(event.TypedGenericEvent[T]) bool { return false },
 	}
 }

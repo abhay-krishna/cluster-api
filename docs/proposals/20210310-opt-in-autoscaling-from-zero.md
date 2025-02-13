@@ -13,7 +13,7 @@ reviewers:
   - "@randomvariable"
   - "@joelspeed"
 creation-date: 2021-03-10
-last-updated: 2021-08-24
+last-updated: 2024-09-12
 status: implementable
 ---
 
@@ -21,25 +21,32 @@ status: implementable
 
 ## Table of Contents
 
-- [Title](#title)
-  - [Table of Contents](#table-of-contents)
-  - [Glossary](#glossary)
-  - [Summary](#summary)
-  - [Motivation](#motivation)
-    - [Goals](#goals)
-    - [Non-Goals/Future Work](#non-goalsfuture-work)
-  - [Proposal](#proposal)
-    - [User Stories](#user-stories)
-      - [Story 1](#story-1)
-      - [Story 2](#story-2)
-      - [Story 3](#story-3)
-    - [Security Model](#security-model)
-    - [Risks and Mitigations](#risks-and-mitigations)
-  - [Alternatives](#alternatives)
-  - [Upgrade Strategy](#upgrade-strategy)
-  - [Additional Details](#additional-details)
-    - [Test Plan](#test-plan-optional)
-  - [Implementation History](#implementation-history)
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Glossary](#glossary)
+- [Summary](#summary)
+- [Motivation](#motivation)
+  - [Goals](#goals)
+  - [Non-Goals/Future Work](#non-goalsfuture-work)
+- [Proposal](#proposal)
+  - [User Stories](#user-stories)
+    - [Story 1](#story-1)
+    - [Story 2](#story-2)
+    - [Story 3](#story-3)
+  - [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
+    - [Infrastructure Machine Template Status Updates](#infrastructure-machine-template-status-updates)
+    - [MachineSet and MachineDeployment Annotations](#machineset-and-machinedeployment-annotations)
+  - [Security Model](#security-model)
+  - [Risks and Mitigations](#risks-and-mitigations)
+- [Alternatives](#alternatives)
+- [Upgrade Strategy](#upgrade-strategy)
+- [Additional Details](#additional-details)
+  - [Test Plan](#test-plan)
+  - [Implementation Status](#implementation-status)
+- [Implementation History](#implementation-history)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Glossary
 
@@ -221,8 +228,23 @@ metadata:
       capacity.cluster-autoscaler.kubernetes.io/gpu-type: "nvidia.com/gpu"
       capacity.cluster-autoscaler.kubernetes.io/memory: "500mb"
       capacity.cluster-autoscaler.kubernetes.io/cpu: "1"
+      capacity.cluster-autoscaler.kubernetes.io/ephemeral-disk: "100Gi"
 ```
 _Note: the annotations will be defined in the cluster autoscaler, not in cluster-api._
+
+**Node Labels and Taints**
+
+When a user would like to signal that the node being created from a MachineSet or
+MachineDeployment will have specific taints or labels on it, they can use the following
+annotations to specify that information.
+
+```
+kind: <MachineSet or MachineDeployment>
+metadata:
+  annotations:
+    capacity.cluster-autoscaler.kubernetes.io/labels: "key1=value1,key2=value2"
+    capacity.cluster-autoscaler.kubernetes.io/taints: "key1=value1:NoSchedule,key2=value2:NoExecute"
+```
 
 ### Security Model
 
@@ -284,8 +306,20 @@ The end goal for testing is to contribute the scale from zero tests that current
 to the wider Kubernetes community. This will not be possible until the testing infrastructure around
 the cluster autoscaler and Cluster API have resolved more.
 
+### Implementation Status
+
+During August and September of 2024 an analysis of Cluster API providers in the kubernetes-sigs organization
+on GitHub was conducted. It produced the following results which were discussed at the 11 September 2024
+office hours meeting:
+
+* [Cluster API Scale From Zero Provider Status as of September 2024](https://hackmd.io/U_jqkq9XTWaPqklTNcFBZQ)
+* [11 September 2024 office hours recording](https://www.youtube.com/watch?v=2hCOlUw4z1w)
+    * [Meeting agenda](https://docs.google.com/document/d/1GgFbaYs-H6J5HSQ6a7n4aKpk0nDLE2hgG2NSOM9YIRw/edit#bookmark=id.i21skyep0xcq)
+
 ## Implementation History
 
+- [X] 09/12/2024: Added section on Implementation Status
+- [X] 01/31/2023: Updated proposal to include annotation changes
 - [X] 06/10/2021: Proposed idea in an issue or [community meeting]
 - [X] 03/04/2020: Previous pull request for [Add cluster autoscaler scale from zero ux proposal](https://github.com/kubernetes-sigs/cluster-api/pull/2530)
 - [X] 10/07/2020: First round of feedback from community [initial proposal]

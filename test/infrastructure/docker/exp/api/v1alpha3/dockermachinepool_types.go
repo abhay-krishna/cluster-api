@@ -19,7 +19,7 @@ package v1alpha3
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	clusterv1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
+	clusterv1alpha3 "sigs.k8s.io/cluster-api/internal/apis/core/v1alpha3"
 	infrav1alpha3 "sigs.k8s.io/cluster-api/test/infrastructure/docker/api/v1alpha3"
 )
 
@@ -113,9 +113,13 @@ type DockerMachinePoolInstanceStatus struct {
 
 // +kubebuilder:resource:path=dockermachinepools,scope=Namespaced,categories=cluster-api
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
+// +kubebuilder:deprecatedversion
 // +kubebuilder:subresource:status
 
 // DockerMachinePool is the Schema for the dockermachinepools API.
+//
+// Deprecated: This type will be removed in one of the next releases.
 type DockerMachinePool struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -137,6 +141,8 @@ func (c *DockerMachinePool) SetConditions(conditions clusterv1alpha3.Conditions)
 // +kubebuilder:object:root=true
 
 // DockerMachinePoolList contains a list of DockerMachinePool.
+//
+// Deprecated: This type will be removed in one of the next releases.
 type DockerMachinePoolList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -144,5 +150,5 @@ type DockerMachinePoolList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&DockerMachinePool{}, &DockerMachinePoolList{})
+	objectTypes = append(objectTypes, &DockerMachinePool{}, &DockerMachinePoolList{})
 }

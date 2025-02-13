@@ -17,10 +17,12 @@ limitations under the License.
 package cluster
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	clusterctlv1 "sigs.k8s.io/cluster-api/cmd/clusterctl/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/client/config"
@@ -235,23 +237,68 @@ func Test_providerInstaller_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			configClient, _ := config.New("", config.InjectReader(fakeReader))
+			ctx := context.Background()
+
+			configClient, _ := config.New(ctx, "", config.InjectReader(fakeReader))
 
 			i := &providerInstaller{
 				configClient:      configClient,
 				proxy:             tt.fields.proxy,
 				providerInventory: newInventoryClient(tt.fields.proxy, nil),
-				repositoryClientFactory: func(provider config.Provider, configClient config.Client, options ...repository.Option) (repository.Client, error) {
-					return repository.New(provider, configClient, repository.InjectRepository(repositoryMap[provider.ManifestLabel()]))
+				repositoryClientFactory: func(ctx context.Context, provider config.Provider, configClient config.Client, _ ...repository.Option) (repository.Client, error) {
+					return repository.New(ctx, provider, configClient, repository.InjectRepository(repositoryMap[provider.ManifestLabel()]))
 				},
 				installQueue: tt.fields.installQueue,
 			}
 
-			err := i.Validate()
+			err := i.Validate(ctx)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
+}
+
+func Test_providerInstaller_ValidateCRDName(t *testing.T) {
+	tests := []struct {
+		name    string
+		crd     unstructured.Unstructured
+		gk      *schema.GroupKind
+		wantErr bool
+	}{
+		{
+			name:    "CRD with valid name",
+			crd:     newFakeCRD("clusterclasses.cluster.x-k8s.io", nil),
+			gk:      &schema.GroupKind{Group: "cluster.x-k8s.io", Kind: "ClusterClass"},
+			wantErr: false,
+		},
+		{
+			name:    "CRD with invalid name",
+			crd:     newFakeCRD("clusterclass.cluster.x-k8s.io", nil),
+			gk:      &schema.GroupKind{Group: "cluster.x-k8s.io", Kind: "ClusterClass"},
+			wantErr: true,
+		},
+		{
+			name: "CRD with invalid name but has skip annotation",
+			crd: newFakeCRD("clusterclass.cluster.x-k8s.io", map[string]string{
+				clusterctlv1.SkipCRDNamePreflightCheckAnnotation: "",
+			}),
+			gk:      &schema.GroupKind{Group: "cluster.x-k8s.io", Kind: "ClusterClass"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			err := validateCRDName(tt.crd, tt.gk)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	}
@@ -283,7 +330,7 @@ func (c *fakeComponents) InventoryObject() clusterctlv1.Provider {
 }
 
 func (c *fakeComponents) Objs() []unstructured.Unstructured {
-	panic("not implemented")
+	return []unstructured.Unstructured{}
 }
 
 func (c *fakeComponents) Yaml() ([]byte, error) {
@@ -296,4 +343,11 @@ func newFakeComponents(name string, providerType clusterctlv1.ProviderType, vers
 		Provider:        config.NewProvider(inventoryObject.ProviderName, "", clusterctlv1.ProviderType(inventoryObject.Type)),
 		inventoryObject: inventoryObject,
 	}
+}
+
+func newFakeCRD(name string, annotations map[string]string) unstructured.Unstructured {
+	u := unstructured.Unstructured{}
+	u.SetName(name)
+	u.SetAnnotations(annotations)
+	return u
 }

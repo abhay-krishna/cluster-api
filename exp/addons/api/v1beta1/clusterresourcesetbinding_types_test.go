@@ -17,10 +17,10 @@ limitations under the License.
 package v1beta1
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -90,6 +90,66 @@ func TestIsResourceApplied(t *testing.T) {
 	}
 }
 
+func TestResourceSetBindingGetResourceBinding(t *testing.T) {
+	resourceRefApplyFailed := ResourceRef{
+		Name: "applyFailed",
+		Kind: "Secret",
+	}
+	resourceRefApplySucceeded := ResourceRef{
+		Name: "ApplySucceeded",
+		Kind: "Secret",
+	}
+	resourceRefNotExist := ResourceRef{
+		Name: "notExist",
+		Kind: "Secret",
+	}
+
+	resourceRefApplyFailedBinding := ResourceBinding{
+		ResourceRef:     resourceRefApplyFailed,
+		Applied:         false,
+		Hash:            "",
+		LastAppliedTime: &metav1.Time{Time: time.Now().UTC()},
+	}
+	crsBinding := &ResourceSetBinding{
+		ClusterResourceSetName: "test-clusterResourceSet",
+		Resources: []ResourceBinding{
+			{
+				ResourceRef:     resourceRefApplySucceeded,
+				Applied:         true,
+				Hash:            "xyz",
+				LastAppliedTime: &metav1.Time{Time: time.Now().UTC()},
+			},
+			resourceRefApplyFailedBinding,
+		},
+	}
+
+	tests := []struct {
+		name               string
+		resourceSetBinding *ResourceSetBinding
+		resourceRef        ResourceRef
+		want               *ResourceBinding
+	}{
+		{
+			name:               "ResourceRef doesn't exist",
+			resourceSetBinding: crsBinding,
+			resourceRef:        resourceRefNotExist,
+			want:               nil,
+		},
+		{
+			name:               "ResourceRef exists",
+			resourceSetBinding: crsBinding,
+			resourceRef:        resourceRefApplyFailed,
+			want:               &resourceRefApplyFailedBinding,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gs := NewWithT(t)
+			gs.Expect(tt.resourceSetBinding.GetResource(tt.resourceRef)).To(BeComparableTo(tt.want))
+		})
+	}
+}
+
 func TestSetResourceBinding(t *testing.T) {
 	resourceRefApplyFailed := ResourceRef{
 		Name: "applyFailed",
@@ -147,7 +207,7 @@ func TestSetResourceBinding(t *testing.T) {
 			tt.resourceSetBinding.SetBinding(tt.resourceBinding)
 			exist := false
 			for _, b := range tt.resourceSetBinding.Resources {
-				if reflect.DeepEqual(b.ResourceRef, tt.resourceBinding.ResourceRef) {
+				if cmp.Equal(b.ResourceRef, tt.resourceBinding.ResourceRef) {
 					gs.Expect(tt.resourceBinding.Applied).To(BeEquivalentTo(b.Applied))
 					exist = true
 				}

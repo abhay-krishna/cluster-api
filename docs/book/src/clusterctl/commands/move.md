@@ -24,15 +24,51 @@ clusterctl move --to-kubeconfig="path-to-target-kubeconfig.yaml"
 To move the Cluster API objects existing in the current namespace of the source management cluster; in case if you want
 to move the Cluster API objects defined in another namespace, you can use the `--namespace` flag.
 
+The discovery mechanism for determining the objects to be moved is in the [provider contract](../../developer/providers/contracts/clusterctl.md#move)
+
 <aside class="note">
 
 <h1> Pause Reconciliation </h1>
 
 Before moving a `Cluster`, clusterctl sets the `Cluster.Spec.Paused` field to `true` stopping
 the controllers from reconciling the workload cluster _in the source management cluster_.
+clusterctl will wait until the `clusterctl.cluster.x-k8s.io/block-move` annotation is not
+present on any resource targeted by the move operation.
 
 The `Cluster` object created in the target management cluster instead will be actively reconciled as soon as the move
 process completes.
+
+</aside>
+
+<aside class="note warning">
+
+<h1> Warning </h1>
+
+`clusterctl move` has been designed and developed around the bootstrap use case described below, and currently this is the only
+use case verified by Cluster API E2E tests.
+
+If someone intends to use `clusterctl move` outside of this scenario, it's recommended to set up a custom validation pipeline of
+it before using the command on a production environment.
+
+Also, it is important to notice that move has not been designed for being used as a backup/restore solution and it has 
+several limitation for this scenario, like e.g. the implementation assumes the cluster must be stable
+while doing the move operation, and possible race conditions happening while the cluster is upgrading, scaling up, 
+remediating etc. has never been investigated nor addressed.
+
+In order to avoid further confusion about this point, `clusterctl backup` and `clusterctl restore` commands have been
+removed because they were built on top of `clusterctl move` logic and they were sharing the same limitations.
+User can use `clusterctl move --to-directory` and `clusterctl move --from-directory` instead; this will hopefully
+make it clear those operation have the same limitations of the move command.
+
+</aside>
+
+<aside class="note warning">
+
+<h1> Warning: Status subresource is never restored </h1>
+
+Every object's `Status` subresource, including every nested field (e.g. `Status.Conditions`), is never restored during a `move` operation. A `Status` subresource should never contain fields that cannot be recreated or derived from information in spec, metadata, or external systems.
+Provider implementers should not store non-ephemeral data in the `Status`. 
+`Status` should be able to be fully rebuilt by controllers by observing the current state of resources.
 
 </aside>
 

@@ -17,6 +17,10 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+if [[ "${TRACE-0}" == "1" ]]; then
+    set -o xtrace
+fi
+
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 ROOT_PATH="$(cd "${SCRIPT_DIR}"/.. && pwd)"
 
@@ -69,4 +73,3 @@ fi
 echo "Running buildifier..."
 cd "${ROOT_PATH}" || exit
 "${BUILDIFIER}" -mode=${MODE} Tiltfile >> "${OUT}" 2>&1
-

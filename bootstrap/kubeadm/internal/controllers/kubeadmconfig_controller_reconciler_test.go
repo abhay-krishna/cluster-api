@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
-	"sigs.k8s.io/cluster-api/internal/test/builder"
+	"sigs.k8s.io/cluster-api/util/test/builder"
 )
 
 func TestKubeadmConfigReconciler(t *testing.T) {
@@ -33,7 +33,7 @@ func TestKubeadmConfigReconciler(t *testing.T) {
 			g := NewWithT(t)
 
 			ns, err := env.CreateNamespace(ctx, "test-kubeadm-config-reconciler")
-			g.Expect(err).To(BeNil())
+			g.Expect(err).ToNot(HaveOccurred())
 
 			cluster := builder.Cluster(ns.Name, "cluster1").Build()
 			g.Expect(env.Create(ctx, cluster)).To(Succeed())
@@ -47,7 +47,8 @@ func TestKubeadmConfigReconciler(t *testing.T) {
 			}(cluster, machine, config, ns)
 
 			reconciler := KubeadmConfigReconciler{
-				Client: env,
+				Client:              env,
+				SecretCachingClient: secretCachingClient,
 			}
 			t.Log("Calling reconcile should requeue")
 			result, err := reconciler.Reconcile(ctx, ctrl.Request{

@@ -19,7 +19,7 @@ package internal
 import (
 	"context"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -34,37 +34,14 @@ type etcdClientFor interface {
 	forLeader(ctx context.Context, nodeNames []string) (*etcd.Client, error)
 }
 
-// ReconcileEtcdMembers iterates over all etcd members and finds members that do not have corresponding nodes.
+// ReconcileEtcdMembersAndControlPlaneNodes iterates over all etcd members and finds members that do not have corresponding nodes.
 // If there are any such members, it deletes them from etcd and removes their nodes from the kubeadm configmap so that kubeadm does not run etcd health checks on them.
-func (w *Workload) ReconcileEtcdMembers(ctx context.Context, nodeNames []string, version semver.Version) ([]string, error) {
-	allRemovedMembers := []string{}
-	allErrs := []error{}
-	for _, nodeName := range nodeNames {
-		removedMembers, errs := w.reconcileEtcdMember(ctx, nodeNames, nodeName, version)
-		allRemovedMembers = append(allRemovedMembers, removedMembers...)
-		allErrs = append(allErrs, errs...)
-	}
-
-	return allRemovedMembers, kerrors.NewAggregate(allErrs)
-}
-
-func (w *Workload) reconcileEtcdMember(ctx context.Context, nodeNames []string, nodeName string, version semver.Version) ([]string, []error) {
-	// Create the etcd Client for the etcd Pod scheduled on the Node
-	etcdClient, err := w.etcdClientGenerator.forFirstAvailableNode(ctx, []string{nodeName})
-	if err != nil {
-		return nil, nil
-	}
-	defer etcdClient.Close()
-
-	members, err := etcdClient.Members(ctx)
-	if err != nil {
-		return nil, nil
-	}
-
+func (w *Workload) ReconcileEtcdMembersAndControlPlaneNodes(ctx context.Context, members []*etcd.Member, nodeNames []string) ([]string, error) {
 	// Check if any member's node is missing from workload cluster
 	// If any, delete it with best effort
 	removedMembers := []string{}
 	errs := []error{}
+
 loopmembers:
 	for _, member := range members {
 		// If this member is just added, it has a empty name until the etcd pod starts. Ignore it.
@@ -84,31 +61,35 @@ loopmembers:
 		if err := w.removeMemberForNode(ctx, member.Name); err != nil {
 			errs = append(errs, err)
 		}
+	}
 
-		if err := w.RemoveNodeFromKubeadmConfigMap(ctx, member.Name, version); err != nil {
-			errs = append(errs, err)
+	return removedMembers, kerrors.NewAggregate(errs)
+}
+
+// UpdateEtcdLocalInKubeadmConfigMap sets etcd local configuration in the kubeadm config map.
+func (w *Workload) UpdateEtcdLocalInKubeadmConfigMap(etcdLocal *bootstrapv1.LocalEtcd) func(*bootstrapv1.ClusterConfiguration) {
+	return func(c *bootstrapv1.ClusterConfiguration) {
+		if c.Etcd.Local != nil {
+			c.Etcd.Local = etcdLocal
 		}
 	}
-	return removedMembers, errs
 }
 
-// UpdateEtcdVersionInKubeadmConfigMap sets the imageRepository or the imageTag or both in the kubeadm config map.
-func (w *Workload) UpdateEtcdVersionInKubeadmConfigMap(ctx context.Context, imageRepository, imageTag string, version semver.Version) error {
-	return w.updateClusterConfiguration(ctx, func(c *bootstrapv1.ClusterConfiguration) {
-		if c.Etcd.Local != nil {
-			c.Etcd.Local.ImageRepository = imageRepository
-			c.Etcd.Local.ImageTag = imageTag
+// UpdateEtcdExternalInKubeadmConfigMap sets etcd external configuration in the kubeadm config map.
+func (w *Workload) UpdateEtcdExternalInKubeadmConfigMap(etcdExternal *bootstrapv1.ExternalEtcd) func(*bootstrapv1.ClusterConfiguration) {
+	return func(c *bootstrapv1.ClusterConfiguration) {
+		if c.Etcd.External != nil {
+			c.Etcd.External = etcdExternal
 		}
-	}, version)
+	}
 }
 
-// UpdateEtcdExtraArgsInKubeadmConfigMap sets extraArgs in the kubeadm config map.
-func (w *Workload) UpdateEtcdExtraArgsInKubeadmConfigMap(ctx context.Context, extraArgs map[string]string, version semver.Version) error {
-	return w.updateClusterConfiguration(ctx, func(c *bootstrapv1.ClusterConfiguration) {
-		if c.Etcd.Local != nil {
-			c.Etcd.Local.ExtraArgs = extraArgs
+func (w *Workload) UpdateExternalEtcdEndpointsInKubeadmConfigMap(ctx context.Context, endpoints []string, version semver.Version) error {
+	return w.UpdateClusterConfiguration(ctx, version, func(c *bootstrapv1.ClusterConfiguration) {
+		if c.Etcd.External != nil {
+			c.Etcd.External.Endpoints = endpoints
 		}
-	}, version)
+	})
 }
 
 // RemoveEtcdMemberForMachine removes the etcd member from the target cluster's etcd cluster.

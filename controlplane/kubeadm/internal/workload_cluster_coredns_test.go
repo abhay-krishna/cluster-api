@@ -19,7 +19,7 @@ package internal
 import (
 	"testing"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
@@ -32,7 +32,7 @@ import (
 
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
-	"sigs.k8s.io/cluster-api/util/yaml"
+	utilyaml "sigs.k8s.io/cluster-api/util/yaml"
 )
 
 func TestUpdateCoreDNS(t *testing.T) {
@@ -124,7 +124,7 @@ func TestUpdateCoreDNS(t *testing.T) {
 			Namespace: metav1.NamespaceSystem,
 		},
 		Data: map[string]string{
-			"ClusterConfiguration": yaml.Raw(`
+			"ClusterConfiguration": utilyaml.Raw(`
 				apiServer:
 				apiVersion: kubeadm.k8s.io/v1beta2
 				dns:
@@ -140,7 +140,7 @@ func TestUpdateCoreDNS(t *testing.T) {
 			Namespace: metav1.NamespaceSystem,
 		},
 		Data: map[string]string{
-			"ClusterConfiguration": yaml.Raw(`
+			"ClusterConfiguration": utilyaml.Raw(`
 				apiServer:
 				apiVersion: kubeadm.k8s.io/v1beta2
 				dns:
@@ -567,7 +567,7 @@ func TestUpdateCoreDNS(t *testing.T) {
 					g.Eventually(func() []rbacv1.PolicyRule {
 						g.Expect(env.Get(ctx, client.ObjectKey{Name: coreDNSClusterRoleName}, &actualClusterRole)).To(Succeed())
 						return actualClusterRole.Rules
-					}, "5s").Should(Equal(tt.expectRules))
+					}, "5s").Should(BeComparableTo(tt.expectRules))
 				}
 			}
 		})
@@ -760,7 +760,7 @@ func TestUpdateCoreDNSClusterRole(t *testing.T) {
 			var actualClusterRole rbacv1.ClusterRole
 			g.Expect(fakeClient.Get(ctx, client.ObjectKey{Name: coreDNSClusterRoleName, Namespace: metav1.NamespaceSystem}, &actualClusterRole)).To(Succeed())
 
-			g.Expect(actualClusterRole.Rules).To(Equal(tt.expectCoreDNSPolicyRules))
+			g.Expect(actualClusterRole.Rules).To(BeComparableTo(tt.expectCoreDNSPolicyRules))
 		})
 	}
 }
@@ -1213,8 +1213,10 @@ func TestGetCoreDNSInfo(t *testing.T) {
 				},
 			},
 			{
-				name: "rename to coredns/coredns when upgrading to coredns=1.8.0 and kubernetesVersion=1.24.0",
-				objs: []client.Object{newCoreDNSInfoDeploymentWithimage(image162), cm},
+				name: "rename to coredns/coredns when upgrading to coredns=1.8.0 and kubernetesVersion=1.22.16",
+				// 1.22.16 uses k8s.gcr.io as default registry. Thus the registry doesn't get changed as
+				// FromImage is already using k8s.gcr.io.
+				objs: []client.Object{newCoreDNSInfoDeploymentWithimage("k8s.gcr.io/coredns:1.6.2"), cm},
 				clusterConfig: &bootstrapv1.ClusterConfiguration{
 					DNS: bootstrapv1.DNS{
 						ImageMeta: bootstrapv1.ImageMeta{
@@ -1222,18 +1224,42 @@ func TestGetCoreDNSInfo(t *testing.T) {
 						},
 					},
 				},
-				kubernetesVersion: semver.MustParse("1.24.0"),
+				kubernetesVersion: semver.MustParse("1.22.16"),
 				expectedInfo: coreDNSInfo{
 					CurrentMajorMinorPatch: "1.6.2",
 					FromImageTag:           "1.6.2",
 					TargetMajorMinorPatch:  "1.8.0",
-					FromImage:              image162,
+					FromImage:              "k8s.gcr.io/coredns:1.6.2",
 					ToImage:                "k8s.gcr.io/coredns/coredns:1.8.0",
 					ToImageTag:             "1.8.0",
 				},
 			},
 			{
+				name: "rename to coredns/coredns when upgrading to coredns=1.8.0 and kubernetesVersion=1.22.17",
+				// 1.22.17 has registry.k8s.io as default registry. Thus the registry gets changed as
+				// FromImage is using k8s.gcr.io.
+				objs: []client.Object{newCoreDNSInfoDeploymentWithimage("k8s.gcr.io/coredns:1.6.2"), cm},
+				clusterConfig: &bootstrapv1.ClusterConfiguration{
+					DNS: bootstrapv1.DNS{
+						ImageMeta: bootstrapv1.ImageMeta{
+							ImageTag: "1.8.0",
+						},
+					},
+				},
+				kubernetesVersion: semver.MustParse("1.22.17"),
+				expectedInfo: coreDNSInfo{
+					CurrentMajorMinorPatch: "1.6.2",
+					FromImageTag:           "1.6.2",
+					TargetMajorMinorPatch:  "1.8.0",
+					FromImage:              "k8s.gcr.io/coredns:1.6.2",
+					ToImage:                "registry.k8s.io/coredns/coredns:1.8.0",
+					ToImageTag:             "1.8.0",
+				},
+			},
+			{
 				name: "rename to coredns/coredns when upgrading to coredns=1.8.0 and kubernetesVersion=1.26.0",
+				// 1.26.0 uses registry.k8s.io as default registry. Thus the registry doesn't get changed as
+				// FromImage is already using registry.k8s.io.
 				objs: []client.Object{newCoreDNSInfoDeploymentWithimage("registry.k8s.io/coredns:1.6.2"), cm},
 				clusterConfig: &bootstrapv1.ClusterConfiguration{
 					DNS: bootstrapv1.DNS{
@@ -1242,12 +1268,34 @@ func TestGetCoreDNSInfo(t *testing.T) {
 						},
 					},
 				},
-				kubernetesVersion: semver.MustParse("1.24.0"),
+				kubernetesVersion: semver.MustParse("1.26.0"),
 				expectedInfo: coreDNSInfo{
 					CurrentMajorMinorPatch: "1.6.2",
 					FromImageTag:           "1.6.2",
 					TargetMajorMinorPatch:  "1.8.0",
 					FromImage:              "registry.k8s.io/coredns:1.6.2",
+					ToImage:                "registry.k8s.io/coredns/coredns:1.8.0",
+					ToImageTag:             "1.8.0",
+				},
+			},
+			{
+				name: "patches ImageRepository to registry.k8s.io if it's set on neither global nor DNS-level and kubernetesVersion >= v1.22.17 and rename to coredns/coredns",
+				// 1.22.17 has registry.k8s.io as default registry. Thus the registry gets changed as
+				// FromImage is using k8s.gcr.io.
+				objs: []client.Object{newCoreDNSInfoDeploymentWithimage(image162), cm},
+				clusterConfig: &bootstrapv1.ClusterConfiguration{
+					DNS: bootstrapv1.DNS{
+						ImageMeta: bootstrapv1.ImageMeta{
+							ImageTag: "1.8.0",
+						},
+					},
+				},
+				kubernetesVersion: semver.MustParse("1.22.17"),
+				expectedInfo: coreDNSInfo{
+					CurrentMajorMinorPatch: "1.6.2",
+					FromImageTag:           "1.6.2",
+					TargetMajorMinorPatch:  "1.8.0",
+					FromImage:              image162,
 					ToImage:                "registry.k8s.io/coredns/coredns:1.8.0",
 					ToImageTag:             "1.8.0",
 				},
@@ -1321,7 +1369,8 @@ func TestGetCoreDNSInfo(t *testing.T) {
 				expectErr:     true,
 			},
 		}
-		for _, tt := range tests {
+		for i := range tests {
+			tt := tests[i]
 			t.Run(tt.name, func(t *testing.T) {
 				g := NewWithT(t)
 				fakeClient := fake.NewClientBuilder().WithObjects(tt.objs...).Build()
@@ -1346,7 +1395,7 @@ func TestGetCoreDNSInfo(t *testing.T) {
 				tt.expectedInfo.Corefile = expectedCorefile
 				tt.expectedInfo.Deployment = actualDepl
 
-				g.Expect(actualInfo).To(Equal(&tt.expectedInfo))
+				g.Expect(actualInfo).To(BeComparableTo(&tt.expectedInfo))
 			})
 		}
 	})
@@ -1361,7 +1410,7 @@ func TestUpdateCoreDNSImageInfoInKubeadmConfigMap(t *testing.T) {
 	}{
 		{
 			name: "it should set the DNS image config",
-			clusterConfigurationData: yaml.Raw(`
+			clusterConfigurationData: utilyaml.Raw(`
 				apiVersion: kubeadm.k8s.io/v1beta2
 				kind: ClusterConfiguration
 				`),
@@ -1371,9 +1420,11 @@ func TestUpdateCoreDNSImageInfoInKubeadmConfigMap(t *testing.T) {
 					ImageTag:        "v1.2.3",
 				},
 			},
-			wantClusterConfiguration: yaml.Raw(`
+			wantClusterConfiguration: utilyaml.Raw(`
 				apiServer: {}
 				apiVersion: kubeadm.k8s.io/v1beta2
+				bottlerocketBootstrap: {}
+				bottlerocketControl: {}
 				controllerManager: {}
 				dns:
 				  imageRepository: example.com/k8s
@@ -1381,11 +1432,15 @@ func TestUpdateCoreDNSImageInfoInKubeadmConfigMap(t *testing.T) {
 				etcd: {}
 				kind: ClusterConfiguration
 				networking: {}
+				pause: {}
+				proxy: {}
+				registryMirror: {}
 				scheduler: {}
 				`),
 		},
 	}
-	for _, tt := range tests {
+	for i := range tests {
+		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 			fakeClient := fake.NewClientBuilder().WithObjects(&corev1.ConfigMap{
@@ -1401,7 +1456,7 @@ func TestUpdateCoreDNSImageInfoInKubeadmConfigMap(t *testing.T) {
 			w := &Workload{
 				Client: fakeClient,
 			}
-			err := w.updateCoreDNSImageInfoInKubeadmConfigMap(ctx, &tt.newDNS, semver.MustParse("1.19.1"))
+			err := w.UpdateClusterConfiguration(ctx, semver.MustParse("1.19.1"), w.updateCoreDNSImageInfoInKubeadmConfigMap(&tt.newDNS))
 			g.Expect(err).ToNot(HaveOccurred())
 
 			var actualConfig corev1.ConfigMap
@@ -1505,7 +1560,7 @@ func TestUpdateCoreDNSDeployment(t *testing.T) {
 				Client: fakeClient,
 			}
 
-			err := w.updateCoreDNSDeployment(ctx, tt.info)
+			err := w.updateCoreDNSDeployment(ctx, tt.info, semver.Version{Major: 1, Minor: 26, Patch: 0})
 			if tt.expectErr {
 				g.Expect(err).To(HaveOccurred())
 				return
@@ -1536,13 +1591,110 @@ func TestUpdateCoreDNSDeployment(t *testing.T) {
 	}
 }
 
+func TestPatchCoreDNSDeploymentTolerations(t *testing.T) {
+	oldControlPlaneToleration := corev1.Toleration{
+		Key:    oldControlPlaneTaint,
+		Effect: corev1.TaintEffectNoSchedule,
+	}
+	controlPlaneToleration := corev1.Toleration{
+		Key:    controlPlaneTaint,
+		Effect: corev1.TaintEffectNoSchedule,
+	}
+
+	tests := []struct {
+		name                string
+		currentTolerations  []corev1.Toleration
+		kubernetesVersion   semver.Version
+		expectedTolerations []corev1.Toleration
+	}{
+		{
+			name:               "adds both tolerations for Kubernetes v1.25",
+			currentTolerations: []corev1.Toleration{},
+			kubernetesVersion:  semver.Version{Major: 1, Minor: 25, Patch: 0},
+			expectedTolerations: []corev1.Toleration{
+				controlPlaneToleration,
+				oldControlPlaneToleration,
+			},
+		},
+		{
+			name:               "adds only new toleration for Kubernetes v1.26",
+			currentTolerations: []corev1.Toleration{},
+			kubernetesVersion:  semver.Version{Major: 1, Minor: 26, Patch: 0},
+			expectedTolerations: []corev1.Toleration{
+				controlPlaneToleration,
+			},
+		},
+		{
+			name: "adds both tolerations for Kubernetes v1.25 and preserves additional tolerations",
+			currentTolerations: []corev1.Toleration{
+				{
+					Key:    "my-special.custom/taint",
+					Effect: corev1.TaintEffectNoExecute,
+					Value:  "aValue",
+				},
+			},
+			kubernetesVersion: semver.Version{Major: 1, Minor: 25, Patch: 0},
+			expectedTolerations: []corev1.Toleration{
+				controlPlaneToleration,
+				oldControlPlaneToleration,
+				{
+					Key:    "my-special.custom/taint",
+					Effect: corev1.TaintEffectNoExecute,
+					Value:  "aValue",
+				},
+			},
+		},
+		{
+			name: "ensures only new toleration is set for Kubernetes v1.26, drops old toleration and preserves additional tolerations",
+			currentTolerations: []corev1.Toleration{
+				oldControlPlaneToleration,
+				{
+					Key:    "my-special.custom/taint",
+					Effect: corev1.TaintEffectNoExecute,
+					Value:  "aValue",
+				},
+			},
+			kubernetesVersion: semver.Version{Major: 1, Minor: 25, Patch: 0},
+			expectedTolerations: []corev1.Toleration{
+				controlPlaneToleration,
+				oldControlPlaneToleration,
+				{
+					Key:    "my-special.custom/taint",
+					Effect: corev1.TaintEffectNoExecute,
+					Value:  "aValue",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			d := &appsv1.Deployment{
+				Spec: appsv1.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Tolerations: tt.currentTolerations,
+						},
+					},
+				},
+			}
+
+			patchCoreDNSDeploymentTolerations(d, tt.kubernetesVersion)
+
+			g.Expect(d.Spec.Template.Spec.Tolerations).To(BeComparableTo(tt.expectedTolerations))
+		})
+	}
+}
+
 type fakeMigrator struct {
 	migrateCalled    bool
 	migrateErr       error
 	migratedCorefile string
 }
 
-func (m *fakeMigrator) Migrate(current, to, corefile string, deprecations bool) (string, error) {
+func (m *fakeMigrator) Migrate(_, _, _ string, _ bool) (string, error) {
 	m.migrateCalled = true
 	if m.migrateErr != nil {
 		return "", m.migrateErr

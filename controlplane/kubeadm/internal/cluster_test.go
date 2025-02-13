@@ -34,10 +34,13 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/controllers/clustercache"
 	"sigs.k8s.io/cluster-api/controllers/remote"
 	"sigs.k8s.io/cluster-api/util/certs"
 	"sigs.k8s.io/cluster-api/util/collections"
@@ -58,12 +61,12 @@ func TestGetMachinesForCluster(t *testing.T) {
 		},
 	}
 	machines, err := m.GetMachinesForCluster(ctx, cluster)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(machines).To(HaveLen(3))
 
 	// Test the ControlPlaneMachines works
 	machines, err = m.GetMachinesForCluster(ctx, cluster, collections.ControlPlaneMachines("my-cluster"))
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(machines).To(HaveLen(1))
 
 	// Test that the filters use AND logic instead of OR logic
@@ -71,7 +74,7 @@ func TestGetMachinesForCluster(t *testing.T) {
 		return cluster.Name == "first-machine"
 	}
 	machines, err = m.GetMachinesForCluster(ctx, cluster, collections.ControlPlaneMachines("my-cluster"), nameFilter)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(machines).To(HaveLen(1))
 }
 
@@ -93,6 +96,9 @@ func TestGetWorkloadCluster(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster-etcd",
 			Namespace: ns.Name,
+			Labels: map[string]string{
+				clusterv1.ClusterNameLabel: "my-cluster",
+			},
 		},
 		Data: map[string][]byte{
 			secret.TLSCrtDataName: certs.EncodeCertPEM(cert),
@@ -105,14 +111,23 @@ func TestGetWorkloadCluster(t *testing.T) {
 	delete(emptyKeyEtcdSecret.Data, secret.TLSKeyDataName)
 	badCrtEtcdSecret := etcdSecret.DeepCopy()
 	badCrtEtcdSecret.Data[secret.TLSCrtDataName] = []byte("bad cert")
-	tracker, err := remote.NewClusterCacheTracker(
-		env.Manager,
-		remote.ClusterCacheTrackerOptions{
-			Log:     &log.Log,
-			Indexes: remote.DefaultIndexes,
+
+	// Create Cluster
+	cluster := &clusterv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-cluster",
+			Namespace: ns.Name,
 		},
-	)
-	g.Expect(err).ToNot(HaveOccurred())
+	}
+	g.Expect(env.CreateAndWait(ctx, cluster)).To(Succeed())
+	defer func(do client.Object) {
+		g.Expect(env.CleanupAndWait(ctx, do)).To(Succeed())
+	}(cluster)
+
+	// Set InfrastructureReady to true so ClusterCache creates the clusterAccessor.
+	patch := client.MergeFrom(cluster.DeepCopy())
+	cluster.Status.InfrastructureReady = true
+	g.Expect(env.Status().Patch(ctx, cluster, patch)).To(Succeed())
 
 	// Create kubeconfig secret
 	// Store the envtest config as the contents of the kubeconfig secret.
@@ -128,6 +143,9 @@ func TestGetWorkloadCluster(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster-kubeconfig",
 			Namespace: ns.Name,
+			Labels: map[string]string{
+				clusterv1.ClusterNameLabel: "my-cluster",
+			},
 		},
 		Data: map[string][]byte{
 			secret.KubeconfigDataName: testEnvKubeconfig,
@@ -187,18 +205,38 @@ func TestGetWorkloadCluster(t *testing.T) {
 			g := NewWithT(t)
 
 			for _, o := range tt.objs {
-				g.Expect(env.Client.Create(ctx, o)).To(Succeed())
+				g.Expect(env.CreateAndWait(ctx, o)).To(Succeed())
 				defer func(do client.Object) {
-					g.Expect(env.Cleanup(ctx, do)).To(Succeed())
+					g.Expect(env.CleanupAndWait(ctx, do)).To(Succeed())
 				}(o)
 			}
 
-			// Note: The API reader is intentionally used instead of the regular (cached) client
-			// to avoid test failures when the local cache isn't able to catch up in time.
+			clusterCache, err := clustercache.SetupWithManager(ctx, env.Manager, clustercache.Options{
+				SecretClient: env.Manager.GetClient(),
+				Client: clustercache.ClientOptions{
+					UserAgent: remote.DefaultClusterAPIUserAgent("test-controller-manager"),
+					Cache: clustercache.ClientCacheOptions{
+						DisableFor: []client.Object{
+							// Don't cache ConfigMaps & Secrets.
+							&corev1.ConfigMap{},
+							&corev1.Secret{},
+						},
+					},
+				},
+			}, controller.Options{MaxConcurrentReconciles: 10, SkipNameValidation: ptr.To(true)})
+			g.Expect(err).ToNot(HaveOccurred())
+
 			m := Management{
-				Client:  env.GetAPIReader(),
-				Tracker: tracker,
+				Client:              env.GetClient(),
+				SecretCachingClient: secretCachingClient,
+				ClusterCache:        clusterCache,
 			}
+
+			// Ensure the ClusterCache reconciled at least once (and if possible created a clusterAccessor).
+			_, err = clusterCache.(reconcile.Reconciler).Reconcile(ctx, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(cluster),
+			})
+			g.Expect(err).ToNot(HaveOccurred())
 
 			workloadCluster, err := m.GetWorkloadCluster(ctx, tt.clusterKey)
 			if tt.expectErr {
@@ -259,13 +297,13 @@ func machineListForTestGetMachinesForCluster() *clusterv1.MachineList {
 				Name:      name,
 				Namespace: metav1.NamespaceDefault,
 				Labels: map[string]string{
-					clusterv1.ClusterLabelName: "my-cluster",
+					clusterv1.ClusterNameLabel: "my-cluster",
 				},
 			},
 		}
 	}
 	controlPlaneMachine := machine("first-machine")
-	controlPlaneMachine.ObjectMeta.Labels[clusterv1.MachineControlPlaneLabelName] = ""
+	controlPlaneMachine.ObjectMeta.Labels[clusterv1.MachineControlPlaneLabel] = ""
 	controlPlaneMachine.OwnerReferences = ownedRef
 
 	return &clusterv1.MachineList{
@@ -291,7 +329,7 @@ type fakeClient struct {
 	listErr      error
 }
 
-func (f *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Object) error {
+func (f *fakeClient) Get(_ context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
 	f.getCalled = true
 	if f.getErr != nil {
 		return f.getErr

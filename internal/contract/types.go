@@ -17,6 +17,7 @@ limitations under the License.
 package contract
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -24,7 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-var errNotFound = errors.New("not found")
+// ErrFieldNotFound is returned when a field is not found in the object.
+var ErrFieldNotFound = errors.New("field not found")
 
 // Path defines a how to access a field in an Unstructured object.
 type Path []string
@@ -87,7 +89,7 @@ func (i *Int64) Get(obj *unstructured.Unstructured) (*int64, error) {
 		return nil, errors.Wrapf(err, "failed to get %s from object", "."+strings.Join(i.path, "."))
 	}
 	if !ok {
-		return nil, errors.Wrapf(errNotFound, "path %s", "."+strings.Join(i.path, "."))
+		return nil, errors.Wrapf(ErrFieldNotFound, "path %s", "."+strings.Join(i.path, "."))
 	}
 	return &value, nil
 }
@@ -96,6 +98,77 @@ func (i *Int64) Get(obj *unstructured.Unstructured) (*int64, error) {
 func (i *Int64) Set(obj *unstructured.Unstructured, value int64) error {
 	if err := unstructured.SetNestedField(obj.UnstructuredContent(), value, i.path...); err != nil {
 		return errors.Wrapf(err, "failed to set path %s of object %v", "."+strings.Join(i.path, "."), obj.GroupVersionKind())
+	}
+	return nil
+}
+
+// Int32 represents an accessor to an int32 path value.
+type Int32 struct {
+	paths []Path
+}
+
+// Path returns the path to the int32 value.
+func (i *Int32) Path() []Path {
+	return i.paths
+}
+
+// Get gets the int32 value.
+// If more than one path is defined, path are checked in order and the first value reported is used
+// (e.g. in case when we are reading from a preferred location first, and then from one or more fallback locations).
+func (i *Int32) Get(obj *unstructured.Unstructured) (*int32, error) {
+	paths := []string{}
+	for _, path := range i.paths {
+		value, ok, err := unstructured.NestedInt64(obj.UnstructuredContent(), path...)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get %s from object", "."+strings.Join(path, "."))
+		}
+		if !ok {
+			paths = append(paths, "."+strings.Join(path, "."))
+			continue
+		}
+		int32Value := int32(value)
+		return &int32Value, nil
+	}
+	return nil, errors.Wrapf(ErrFieldNotFound, "path %s", strings.Join(paths, ", "))
+}
+
+// Set sets the int32 value in the path.
+// If more than one path is defined, only the first path will be set.
+// (the first path is considered the preferred location).
+// Note: Cluster API should never Set values on external objects owner by providers; however this method is useful for writing tests.
+func (i *Int32) Set(obj *unstructured.Unstructured, value int64) error {
+	if err := unstructured.SetNestedField(obj.UnstructuredContent(), value, i.paths[0]...); err != nil {
+		return errors.Wrapf(err, "failed to set path %s of object %v", "."+strings.Join(i.paths[0], "."), obj.GroupVersionKind())
+	}
+	return nil
+}
+
+// Bool represents an accessor to an bool path value.
+type Bool struct {
+	path Path
+}
+
+// Path returns the path to the bool value.
+func (b *Bool) Path() Path {
+	return b.path
+}
+
+// Get gets the bool value.
+func (b *Bool) Get(obj *unstructured.Unstructured) (*bool, error) {
+	value, ok, err := unstructured.NestedBool(obj.UnstructuredContent(), b.path...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get %s from object", "."+strings.Join(b.path, "."))
+	}
+	if !ok {
+		return nil, errors.Wrapf(ErrFieldNotFound, "path %s", "."+strings.Join(b.path, "."))
+	}
+	return &value, nil
+}
+
+// Set sets the bool value in the path.
+func (b *Bool) Set(obj *unstructured.Unstructured, value bool) error {
+	if err := unstructured.SetNestedField(obj.UnstructuredContent(), value, b.path...); err != nil {
+		return errors.Wrapf(err, "failed to set path %s of object %v", "."+strings.Join(b.path, "."), obj.GroupVersionKind())
 	}
 	return nil
 }
@@ -117,7 +190,7 @@ func (s *String) Get(obj *unstructured.Unstructured) (*string, error) {
 		return nil, errors.Wrapf(err, "failed to get %s from object", "."+strings.Join(s.path, "."))
 	}
 	if !ok {
-		return nil, errors.Wrapf(errNotFound, "path %s", "."+strings.Join(s.path, "."))
+		return nil, errors.Wrapf(ErrFieldNotFound, "path %s", "."+strings.Join(s.path, "."))
 	}
 	return &value, nil
 }
@@ -147,11 +220,11 @@ func (i *Duration) Get(obj *unstructured.Unstructured) (*metav1.Duration, error)
 		return nil, errors.Wrapf(err, "failed to get %s from object", "."+strings.Join(i.path, "."))
 	}
 	if !ok {
-		return nil, errors.Wrapf(errNotFound, "path %s", "."+strings.Join(i.path, "."))
+		return nil, errors.Wrapf(ErrFieldNotFound, "path %s", "."+strings.Join(i.path, "."))
 	}
 
 	d := &metav1.Duration{}
-	if err := d.UnmarshalJSON([]byte(durationString)); err != nil {
+	if err := d.UnmarshalJSON([]byte(strconv.Quote(durationString))); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal duration %s from object", "."+strings.Join(i.path, "."))
 	}
 
@@ -160,12 +233,7 @@ func (i *Duration) Get(obj *unstructured.Unstructured) (*metav1.Duration, error)
 
 // Set sets the metav1.Duration value in the path.
 func (i *Duration) Set(obj *unstructured.Unstructured, value metav1.Duration) error {
-	durationString, err := value.MarshalJSON()
-	if err != nil {
-		return errors.Wrapf(err, "failed to marshal duration %s", value.Duration.String())
-	}
-
-	if err := unstructured.SetNestedField(obj.UnstructuredContent(), string(durationString), i.path...); err != nil {
+	if err := unstructured.SetNestedField(obj.UnstructuredContent(), value.Duration.String(), i.path...); err != nil {
 		return errors.Wrapf(err, "failed to set path %s of object %v", "."+strings.Join(i.path, "."), obj.GroupVersionKind())
 	}
 	return nil

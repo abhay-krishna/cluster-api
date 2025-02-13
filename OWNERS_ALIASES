@@ -5,7 +5,7 @@ aliases:
   - fabriziopandini
   - justinsb
   - neolit123
-  - timothysc
+  - vincepri
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for Cluster API
@@ -14,12 +14,13 @@ aliases:
   # active folks who can be contacted to perform admin-related
   # tasks on the repo, or otherwise approve any PRS.
   cluster-api-admins:
-  - CecileRobertMichon
+  - fabriziopandini
+  - sbueringer
   - vincepri
 
   # non-admin folks who have write-access and can approve any PRs in the repo
   cluster-api-maintainers:
-  - CecileRobertMichon
+  - chrischdi
   - enxebre
   - fabriziopandini
   - sbueringer
@@ -27,9 +28,9 @@ aliases:
 
   # folks who can review and LGTM any PRs in the repo
   cluster-api-reviewers:
+  - jackfrancis
   - JoelSpeed
-  - sbueringer
-  - stmcginnis
+  - richardcase
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for controllers/topology
@@ -37,8 +38,6 @@ aliases:
 
   cluster-api-topology-maintainers:
   cluster-api-topology-reviewers:
-  - ykakarap
-  - killianmuldoon
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for bootstrap/kubeadm
@@ -46,17 +45,14 @@ aliases:
 
   cluster-api-bootstrap-provider-kubeadm-maintainers:
   cluster-api-bootstrap-provider-kubeadm-reviewers:
-    - killianmuldoon
+  - g-gaston
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for bootstrap/kubeadm/internal/ignition
   # -----------------------------------------------------------
 
   cluster-api-bootstrap-provider-kubeadm-ignition-maintainers:
-  cluster-api-bootstrap-provider-kubeadm-ignition-reviewers:
-  - dongsupark
-  - invidian
-  - johananl
+  cluster-api-bootstrap-provider-kubeadm-ignition-reviewers: []
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for controlplane/kubeadm
@@ -64,6 +60,7 @@ aliases:
 
   cluster-api-controlplane-provider-kubeadm-maintainers:
   cluster-api-controlplane-provider-kubeadm-reviewers:
+  - g-gaston
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for cmd/clusterctl
@@ -71,33 +68,68 @@ aliases:
 
   cluster-api-clusterctl-maintainers:
   cluster-api-clusterctl-reviewers:
-  - ykakarap
+  - Jont828
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for test
   # -----------------------------------------------------------
 
-  cluster-api-test-reviewers:
   cluster-api-test-maintainers:
+  cluster-api-test-reviewers:
+  - elmiko
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for test/framework
   # -----------------------------------------------------------
 
-  cluster-api-test-framework-reviewers:
   cluster-api-test-framework-maintainers:
+  cluster-api-test-framework-reviewers:
+  - elmiko
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for test/infrastructure/docker
   # -----------------------------------------------------------
 
-  cluster-api-provider-docker-reviewers:
   cluster-api-provider-docker-maintainers:
+  cluster-api-provider-docker-reviewers:
+  - elmiko
+
+  # -----------------------------------------------------------
+  # OWNER_ALIASES for test/infrastructure/inmemory
+  # -----------------------------------------------------------
+
+  cluster-api-provider-inmemory-maintainers:
+  cluster-api-provider-inmemory-reviewers:
 
   # -----------------------------------------------------------
   # OWNER_ALIASES for docs
   # -----------------------------------------------------------
 
+  cluster-api-docs-maintainers: []
   cluster-api-docs-reviewers:
-    - killianmuldoon
-  cluster-api-docs-maintainers:
+  - elmiko
+
+  # -----------------------------------------------------------
+  # OWNER_ALIASES for v1.9 release-team
+  # -----------------------------------------------------------
+
+  cluster-api-release-lead:
+  - Sunnatillo
+
+  cluster-api-release-team:
+  # members added in commented lines have a pending membership
+  # and will be added back once it is acquired.
+  - adilGhaffarDev
+  - cahillsf # release ci lead
+  # - chandankumar4 # release comms lead
+  - jayesh-srivastava
+  - pravarag
+  # - rajankumary2k
+  - SD-13
+  # - serngawy
+  - sivchari
+  - Sunnatillo  # release lead
+  # - tasdikrahman
+  - tormath1
+  # - varshasuryawanshi
+  - vishalanarase

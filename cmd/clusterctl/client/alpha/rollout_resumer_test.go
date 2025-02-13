@@ -27,6 +27,8 @@ import (
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/internal/test"
+	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util/annotations"
 )
 
 func Test_ObjectResumer(t *testing.T) {
@@ -92,26 +94,83 @@ func Test_ObjectResumer(t *testing.T) {
 			wantErr:    true,
 			wantPaused: false,
 		},
+		{
+			name: "paused kubeadmcontrolplane should be unpaused",
+			fields: fields{
+				objs: []client.Object{
+					&controlplanev1.KubeadmControlPlane{
+						TypeMeta: metav1.TypeMeta{
+							Kind: "KubeadmControlPlane",
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "default",
+							Name:      "kcp",
+							Annotations: map[string]string{
+								clusterv1.PausedAnnotation: "true",
+							},
+						},
+					},
+				},
+				ref: corev1.ObjectReference{
+					Kind:      KubeadmControlPlane,
+					Name:      "kcp",
+					Namespace: "default",
+				},
+			},
+			wantErr:    false,
+			wantPaused: false,
+		},
+		{
+			name: "unpausing an already unpaused kubeadmcontrolplane should return error",
+			fields: fields{
+				objs: []client.Object{
+					&controlplanev1.KubeadmControlPlane{
+						TypeMeta: metav1.TypeMeta{
+							Kind: "KubeadmControlPlane",
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "default",
+							Name:      "kcp",
+						},
+					},
+				},
+				ref: corev1.ObjectReference{
+					Kind:      KubeadmControlPlane,
+					Name:      "kcp",
+					Namespace: "default",
+				},
+			},
+			wantErr:    true,
+			wantPaused: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 			r := newRolloutClient()
 			proxy := test.NewFakeProxy().WithObjs(tt.fields.objs...)
-			err := r.ObjectResumer(proxy, tt.fields.ref)
+			err := r.ObjectResumer(context.Background(), proxy, tt.fields.ref)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			for _, obj := range tt.fields.objs {
-				cl, err := proxy.NewClient()
+				cl, err := proxy.NewClient(context.Background())
 				g.Expect(err).ToNot(HaveOccurred())
 				key := client.ObjectKeyFromObject(obj)
-				md := &clusterv1.MachineDeployment{}
-				err = cl.Get(context.TODO(), key, md)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(md.Spec.Paused).To(Equal(tt.wantPaused))
+				switch obj.(type) {
+				case *clusterv1.MachineDeployment:
+					md := &clusterv1.MachineDeployment{}
+					err = cl.Get(context.TODO(), key, md)
+					g.Expect(err).ToNot(HaveOccurred())
+					g.Expect(md.Spec.Paused).To(Equal(tt.wantPaused))
+				case *controlplanev1.KubeadmControlPlane:
+					kcp := &controlplanev1.KubeadmControlPlane{}
+					err = cl.Get(context.TODO(), key, kcp)
+					g.Expect(err).ToNot(HaveOccurred())
+					g.Expect(annotations.HasPaused(kcp.GetObjectMeta())).To(Equal(tt.wantPaused))
+				}
 			}
 		})
 	}

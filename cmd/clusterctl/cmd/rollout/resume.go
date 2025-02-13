@@ -17,10 +17,12 @@ limitations under the License.
 package rollout
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
-	"k8s.io/kubectl/pkg/util/templates"
 
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/client"
+	"sigs.k8s.io/cluster-api/cmd/clusterctl/cmd/internal/templates"
 )
 
 // resumeOptions is the start of the data required to perform the operation.
@@ -37,11 +39,14 @@ var (
 	resumeLong = templates.LongDesc(`
 		Resume a paused cluster-api resource
 
-	        Paused resources will not be reconciled by a controller. By resuming a resource, we allow it to be reconciled again. Currently only MachineDeployments support being resumed.`)
+	        Paused resources will not be reconciled by a controller. By resuming a resource, we allow it to be reconciled again. Currently only MachineDeployments and KubeadmControlPlanes support being resumed.`)
 
 	resumeExample = templates.Examples(`
 		# Resume an already paused machinedeployment
-		clusterctl alpha rollout resume machinedeployment/my-md-0`)
+		clusterctl alpha rollout resume machinedeployment/my-md-0
+
+		# Resume a kubeadmcontrolplane
+		clusterctl alpha rollout resume kubeadmcontrolplane/my-kcp`)
 )
 
 // NewCmdRolloutResume returns a Command instance for 'rollout resume' sub command.
@@ -52,7 +57,7 @@ func NewCmdRolloutResume(cfgFile string) *cobra.Command {
 		Short:                 "Resume a cluster-api resource",
 		Long:                  resumeLong,
 		Example:               resumeExample,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return runResume(cfgFile, args)
 		},
 	}
@@ -68,12 +73,14 @@ func NewCmdRolloutResume(cfgFile string) *cobra.Command {
 func runResume(cfgFile string, args []string) error {
 	resumeOpt.resources = args
 
-	c, err := client.New(cfgFile)
+	ctx := context.Background()
+
+	c, err := client.New(ctx, cfgFile)
 	if err != nil {
 		return err
 	}
 
-	return c.RolloutResume(client.RolloutOptions{
+	return c.RolloutResume(ctx, client.RolloutResumeOptions{
 		Kubeconfig: client.Kubeconfig{Path: resumeOpt.kubeconfig, Context: resumeOpt.kubeconfigContext},
 		Namespace:  resumeOpt.namespace,
 		Resources:  resumeOpt.resources,

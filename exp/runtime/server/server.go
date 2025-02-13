@@ -19,6 +19,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,15 +38,13 @@ import (
 	runtimehooksv1 "sigs.k8s.io/cluster-api/exp/runtime/hooks/api/v1alpha1"
 )
 
-const tlsVersion13 = "1.3"
-
 // DefaultPort is the default port that the webhook server serves.
 var DefaultPort = 9443
 
 // Server is a runtime webhook server.
 type Server struct {
+	webhook.Server
 	catalog  *runtimecatalog.Catalog
-	server   *webhook.Server
 	handlers map[string]ExtensionHandler
 }
 
@@ -54,13 +53,15 @@ type Options struct {
 	// Catalog is the catalog used to handle requests.
 	Catalog *runtimecatalog.Catalog
 
-	// Port is the port that the webhook server serves at.
-	// It is used to set webhook.Server.Port.
-	Port int
-
-	// Host is the hostname that the webhook server binds to.
+	// Host is the address that the server will listen on.
+	// Defaults to "" - all addresses.
 	// It is used to set webhook.Server.Host.
 	Host string
+
+	// Port is the port number that the server will serve.
+	// It will be defaulted to 9443 if unspecified.
+	// It is used to set webhook.Server.Port.
+	Port int
 
 	// CertDir is the directory that contains the server key and certificate.
 	// If not set, webhook server would look up the server key and certificate in
@@ -68,10 +69,24 @@ type Options struct {
 	// must be named tls.key and tls.crt, respectively.
 	// It is used to set webhook.Server.CertDir.
 	CertDir string
+
+	// CertName is the server certificate name. Defaults to tls.crt.
+	//
+	// Note: This option is only used when TLSOpts does not set GetCertificate.
+	CertName string
+
+	// KeyName is the server key name. Defaults to tls.key.
+	//
+	// Note: This option is only used when TLSOpts does not set GetCertificate.
+	KeyName string
+
+	// TLSOpts is used to allow configuring the TLS config used for the server.
+	// This also allows providing a certificate via GetCertificate.
+	TLSOpts []func(*tls.Config)
 }
 
-// NewServer creates a new runtime webhook server based on the given Options.
-func NewServer(options Options) (*Server, error) {
+// New creates a new runtime webhook server based on the given Options.
+func New(options Options) (*Server, error) {
 	if options.Catalog == nil {
 		return nil, errors.Errorf("catalog is required")
 	}
@@ -81,20 +96,28 @@ func NewServer(options Options) (*Server, error) {
 	if options.CertDir == "" {
 		options.CertDir = filepath.Join(os.TempDir(), "k8s-webhook-server", "serving-certs")
 	}
-
-	webhookServer := &webhook.Server{
-		Port:          options.Port,
-		Host:          options.Host,
-		CertDir:       options.CertDir,
-		CertName:      "tls.crt",
-		KeyName:       "tls.key",
-		WebhookMux:    http.NewServeMux(),
-		TLSMinVersion: tlsVersion13,
+	if options.CertName == "" {
+		options.CertName = "tls.crt"
+	}
+	if options.KeyName == "" {
+		options.KeyName = "tls.key"
 	}
 
+	webhookServer := webhook.NewServer(
+		webhook.Options{
+			Port:       options.Port,
+			Host:       options.Host,
+			CertDir:    options.CertDir,
+			CertName:   options.CertName,
+			KeyName:    options.KeyName,
+			TLSOpts:    options.TLSOpts,
+			WebhookMux: http.NewServeMux(),
+		},
+	)
+
 	return &Server{
+		Server:   webhookServer,
 		catalog:  options.Catalog,
-		server:   webhookServer,
 		handlers: map[string]ExtensionHandler{},
 	}, nil
 }
@@ -112,15 +135,20 @@ type ExtensionHandler struct {
 	Hook runtimecatalog.Hook
 
 	// Name is the name of the extension handler.
+	// An extension handler name must be valid in line RFC 1123 Label Names.
 	Name string
 
 	// HandlerFunc is the handler function.
 	HandlerFunc runtimecatalog.Hook
 
 	// TimeoutSeconds is the timeout of the extension handler.
+	// If left undefined, this will be defaulted to 10s when processing the answer to the discovery
+	// call for this server.
 	TimeoutSeconds *int32
 
-	// FailurePolicy is the failure policy of the extension handler
+	// FailurePolicy is the failure policy of the extension handler.
+	// If left undefined, this will be defaulted to FailurePolicyFail when processing the answer to the discovery
+	// call for this server.
 	FailurePolicy *runtimehooksv1.FailurePolicy
 }
 
@@ -175,8 +203,8 @@ func (s *Server) validateHandler(handler ExtensionHandler) error {
 	}
 
 	// Get hook and handler request and response types.
-	hookRequestType := hookFuncType.In(0)  //nolint:ifshort
-	hookResponseType := hookFuncType.In(1) //nolint:ifshort
+	hookRequestType := hookFuncType.In(0)
+	hookResponseType := hookFuncType.In(1)
 	handlerContextType := handlerFuncType.In(0)
 	handlerRequestType := handlerFuncType.In(1)
 	handlerResponseType := handlerFuncType.In(2)
@@ -222,10 +250,10 @@ func (s *Server) Start(ctx context.Context) error {
 		handler := h
 
 		wrappedHandler := s.wrapHandler(handler)
-		s.server.Register(handlerPath, http.HandlerFunc(wrappedHandler))
+		s.Server.Register(handlerPath, http.HandlerFunc(wrappedHandler))
 	}
 
-	return s.server.StartStandalone(ctx, nil)
+	return s.Server.Start(ctx)
 }
 
 // discoveryHandler generates a discovery handler based on a list of handlers.

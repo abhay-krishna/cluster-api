@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -32,8 +32,8 @@ import (
 
 func Test_ObjectRollbacker(t *testing.T) {
 	labels := map[string]string{
-		clusterv1.ClusterLabelName:           "test",
-		clusterv1.MachineDeploymentLabelName: "test-md-0",
+		clusterv1.ClusterNameLabel:           "test",
+		clusterv1.MachineDeploymentNameLabel: "test-md-0",
 	}
 	currentVersion := "v1.19.3"
 	rollbackVersion := "v1.19.1"
@@ -45,7 +45,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 			Name:      "test-md-0",
 			Namespace: "default",
 			Labels: map[string]string{
-				clusterv1.ClusterLabelName: "test",
+				clusterv1.ClusterNameLabel: "test",
 			},
 			Annotations: map[string]string{
 				clusterv1.RevisionAnnotation: "2",
@@ -55,7 +55,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 			ClusterName: "test",
 			Selector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					clusterv1.ClusterLabelName: "test",
+					clusterv1.ClusterNameLabel: "test",
 				},
 			},
 			Template: clusterv1.MachineTemplateSpec{
@@ -71,7 +71,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 						Name:       "md-template",
 					},
 					Bootstrap: clusterv1.Bootstrap{
-						DataSecretName: pointer.StringPtr("data-secret-name"),
+						DataSecretName: ptr.To("data-secret-name"),
 					},
 				},
 			},
@@ -106,7 +106,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 								*metav1.NewControllerRef(deployment, clusterv1.GroupVersion.WithKind("MachineDeployment")),
 							},
 							Labels: map[string]string{
-								clusterv1.ClusterLabelName: "test",
+								clusterv1.ClusterNameLabel: "test",
 							},
 							Annotations: map[string]string{
 								clusterv1.RevisionAnnotation: "2",
@@ -124,7 +124,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 								*metav1.NewControllerRef(deployment, clusterv1.GroupVersion.WithKind("MachineDeployment")),
 							},
 							Labels: map[string]string{
-								clusterv1.ClusterLabelName: "test",
+								clusterv1.ClusterNameLabel: "test",
 							},
 							Annotations: map[string]string{
 								clusterv1.RevisionAnnotation: "999",
@@ -134,7 +134,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 							ClusterName: "test",
 							Selector: metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									clusterv1.ClusterLabelName: "test",
+									clusterv1.ClusterNameLabel: "test",
 								},
 							},
 							Template: clusterv1.MachineTemplateSpec{
@@ -150,7 +150,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 										Name:       "md-template-rollback",
 									},
 									Bootstrap: clusterv1.Bootstrap{
-										DataSecretName: pointer.StringPtr("data-secret-name-rollback"),
+										DataSecretName: ptr.To("data-secret-name-rollback"),
 									},
 								},
 							},
@@ -185,7 +185,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 								*metav1.NewControllerRef(deployment, clusterv1.GroupVersion.WithKind("MachineDeployment")),
 							},
 							Labels: map[string]string{
-								clusterv1.ClusterLabelName: "test",
+								clusterv1.ClusterNameLabel: "test",
 							},
 							Annotations: map[string]string{
 								clusterv1.RevisionAnnotation: "2",
@@ -218,7 +218,7 @@ func Test_ObjectRollbacker(t *testing.T) {
 								*metav1.NewControllerRef(deployment, clusterv1.GroupVersion.WithKind("MachineDeployment")),
 							},
 							Labels: map[string]string{
-								clusterv1.ClusterLabelName: "test",
+								clusterv1.ClusterNameLabel: "test",
 							},
 							Annotations: map[string]string{
 								clusterv1.RevisionAnnotation: "2",
@@ -241,13 +241,13 @@ func Test_ObjectRollbacker(t *testing.T) {
 			g := NewWithT(t)
 			r := newRolloutClient()
 			proxy := test.NewFakeProxy().WithObjs(tt.fields.objs...)
-			err := r.ObjectRollbacker(proxy, tt.fields.ref, tt.fields.toRevision)
+			err := r.ObjectRollbacker(context.Background(), proxy, tt.fields.ref, tt.fields.toRevision)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
 			}
 			g.Expect(err).ToNot(HaveOccurred())
-			cl, err := proxy.NewClient()
+			cl, err := proxy.NewClient(context.Background())
 			g.Expect(err).ToNot(HaveOccurred())
 			key := client.ObjectKeyFromObject(deployment)
 			md := &clusterv1.MachineDeployment{}

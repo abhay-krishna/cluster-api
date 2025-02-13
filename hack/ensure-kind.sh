@@ -18,12 +18,21 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-set -x
+if [[ "${TRACE-0}" == "1" ]]; then
+    set -o xtrace
+fi
 
-GOPATH_BIN="$(go env GOPATH)/bin/"
-MINIMUM_KIND_VERSION=v0.14.0
+# shellcheck source=./hack/utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
+
+GOPATH_BIN="$(go env GOPATH)/bin"
 goarch="$(go env GOARCH)"
 goos="$(go env GOOS)"
+
+# Note: When updating the MINIMUM_KIND_VERSION new shas MUST be added in `preBuiltMappings` at `test/infrastructure/kind/mapper.go`
+# Note: The kind version here is out of sync with our go dependency which is 0.25.0 due to issues building images <= kubernetes v1.30.
+MINIMUM_KIND_VERSION=v0.24.0
+
 
 # Ensure the kind tool exists and is a viable version, or installs it
 verify_kind_version() {
@@ -37,6 +46,7 @@ verify_kind_version() {
       fi
       curl -sLo "${GOPATH_BIN}/kind" "https://github.com/kubernetes-sigs/kind/releases/download/${MINIMUM_KIND_VERSION}/kind-${goos}-${goarch}"
       chmod +x "${GOPATH_BIN}/kind"
+      verify_gopath_bin
     else
       echo "Missing required binary in path: kind"
       return 2

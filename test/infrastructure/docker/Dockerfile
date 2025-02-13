@@ -14,8 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Build the manager binary
 # Run this with docker build --build-arg builder_image=<golang:x.y.z>
 ARG builder_image
+
+# Build architecture
+ARG ARCH
 
 # Ignore Hadolint rule "Always tag the version of an image explicitly."
 # It's an invalid finding since the image is explicitly set in the Makefile.
@@ -29,10 +33,6 @@ ENV GOPROXY=$goproxy
 
 # Gets additional CAPD dependencies
 WORKDIR /tmp
-
-RUN curl -LO https://dl.k8s.io/release/v1.24.0/bin/linux/${ARCH}/kubectl && \
-    chmod +x ./kubectl && \
-    mv ./kubectl /usr/bin/kubectl
 
 WORKDIR /workspace
 COPY go.mod go.mod
@@ -57,20 +57,22 @@ COPY . .
 # Essentially, change directories into CAPD
 WORKDIR /workspace/test/infrastructure/docker
 
+# Build
+ARG ARCH
+
 # Build the CAPD manager using the compiler cache folder
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -trimpath -a -o /workspace/manager main.go
+    CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -trimpath -a -o /workspace/manager .
 
 # NOTE: CAPD can't use non-root because docker requires access to the docker socket
 
 # Ignore Hadolint rule "Using latest is prone to errors if the image will ever update. Pin the version explicitly to a release tag."
 # https://github.com/hadolint/hadolint/wiki/DL3007
 # hadolint ignore=DL3007
-FROM gcr.io/distroless/static:latest
+FROM gcr.io/distroless/static:latest-${ARCH}
 
 WORKDIR /
 COPY --from=builder /workspace/manager .
-COPY --from=builder /usr/bin/kubectl /usr/bin/kubectl
 
 ENTRYPOINT ["/manager"]

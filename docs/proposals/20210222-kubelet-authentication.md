@@ -30,55 +30,60 @@ superseded-by:
 # Cluster API Kubelet Authentication
 
 
+**Note**: This proposal has not been implemented and should be carefully re-evaluated if it is still up-to-date before implementation.
+
 ## Table of Contents
 
-- [Cluster API Kubelet Authentication](#cluster-api-kubelet-authentication)
-  - [Table of Contents](#table-of-contents)
-  - [Glossary](#glossary)
-  - [Summary](#summary)
-  - [Motivation](#motivation)
-    - [Goals](#goals)
-    - [Non-Goals/Future Work](#non-goalsfuture-work)
-  - [Proposal](#proposal)
-    - [User Stories](#user-stories)
-      - [Story 1: Machine Attestation](#story-1-machine-attestation)
-      - [Story 2: MachinePool race conditions](#story-2-machinepool-race-conditions)
-    - [Requirements](#requirements)
-    - [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
-      - [New Components](#new-components)
-      - [Kubelet authentication plugin](#kubelet-authentication-plugin)
-      - [Node Attestation](#node-attestation)
-      - [CSR format used by kubelet-authenticator](#csr-format-used-by-kubelet-authenticator)
-        - [OIDs](#oids)
-      - [CSR PEM Blocks](#csr-pem-blocks)
-      - [Attestation data](#attestation-data)
-      - [Core Specification](#core-specification)
-      - [Provider Specification](#provider-specification)
-        - [All providers](#all-providers)
-        - [Insecure providers](#insecure-providers)
-        - [Secure providers](#secure-providers)
-        - [TPM based providers](#tpm-based-providers)
-      - [Kubeadm](#kubeadm)
-      - [Changes to the Cluster and core Cluster API controller](#changes-to-the-cluster-and-core-cluster-api-controller)
-      - [Changes to KubeadmControlPlane resources and controller](#changes-to-kubeadmcontrolplane-resources-and-controller)
-      - [Changes to Cluster API Bootstrap Provider Kubeadm](#changes-to-cluster-api-bootstrap-provider-kubeadm)
-        - [Changes to token rotation](#changes-to-token-rotation)
-      - [Kubelet authenticator flow](#kubelet-authenticator-flow)
-        - [Client CSR flow](#client-csr-flow)
-        - [Serving CSR handling](#serving-csr-handling)
-    - [Risks and Mitigations](#risks-and-mitigations)
-  - [Alternatives](#alternatives)
-      - [Implement within the cloud providers instead of Cluster API](#implement-within-the-cloud-providers-instead-of-cluster-api)
-      - [Implement as authentication webhook, as per aws-iam-authenticator (Amazon EKS)](#implement-as-authentication-webhook-as-per-aws-iam-authenticator-amazon-eks)
-      - [SPIRE/SPIFFE](#spirespiffe)
-  - [Upgrade Strategy](#upgrade-strategy)
-  - [Additional Details](#additional-details)
-    - [Test Plan [optional]](#test-plan-optional)
-    - [Graduation Criteria [optional]](#graduation-criteria-optional)
-      - [Graduation to beta](#graduation-to-beta)
-      - [Graduation to GA](#graduation-to-ga)
-    - [Version Skew Strategy](#version-skew-strategy)
-  - [Implementation History](#implementation-history)
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Glossary](#glossary)
+- [Summary](#summary)
+- [Motivation](#motivation)
+  - [Goals](#goals)
+  - [Non-Goals/Future Work](#non-goalsfuture-work)
+- [Proposal](#proposal)
+  - [User Stories](#user-stories)
+    - [Story 1: Machine Attestation](#story-1-machine-attestation)
+    - [Story 2: MachinePool race conditions](#story-2-machinepool-race-conditions)
+  - [Requirements](#requirements)
+  - [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
+    - [New Components](#new-components)
+    - [Kubelet authentication plugin](#kubelet-authentication-plugin)
+    - [Node Attestation](#node-attestation)
+    - [CSR format used by kubelet-authenticator](#csr-format-used-by-kubelet-authenticator)
+      - [OIDs](#oids)
+    - [CSR PEM Blocks](#csr-pem-blocks)
+    - [Attestation data](#attestation-data)
+    - [Core Specification](#core-specification)
+    - [Provider Specification](#provider-specification)
+      - [All providers](#all-providers)
+      - [Insecure providers](#insecure-providers)
+      - [Secure providers](#secure-providers)
+      - [TPM based providers](#tpm-based-providers)
+    - [Kubeadm](#kubeadm)
+    - [Changes to the Cluster and core Cluster API controller](#changes-to-the-cluster-and-core-cluster-api-controller)
+    - [Changes to KubeadmControlPlane resources and controller](#changes-to-kubeadmcontrolplane-resources-and-controller)
+    - [Changes to Cluster API Bootstrap Provider Kubeadm](#changes-to-cluster-api-bootstrap-provider-kubeadm)
+      - [Changes to token rotation](#changes-to-token-rotation)
+    - [Kubelet authenticator flow](#kubelet-authenticator-flow)
+      - [Client CSR flow](#client-csr-flow)
+      - [Serving CSR handling](#serving-csr-handling)
+  - [Risks and Mitigations](#risks-and-mitigations)
+- [Alternatives](#alternatives)
+    - [Implement within the cloud providers instead of Cluster API](#implement-within-the-cloud-providers-instead-of-cluster-api)
+    - [Implement as authentication webhook, as per aws-iam-authenticator (Amazon EKS)](#implement-as-authentication-webhook-as-per-aws-iam-authenticator-amazon-eks)
+    - [SPIRE/SPIFFE](#spirespiffe)
+- [Upgrade Strategy](#upgrade-strategy)
+- [Additional Details](#additional-details)
+  - [Test Plan [optional]](#test-plan-optional)
+  - [Graduation Criteria [optional]](#graduation-criteria-optional)
+    - [Graduation to beta](#graduation-to-beta)
+    - [Graduation to GA](#graduation-to-ga)
+  - [Version Skew Strategy](#version-skew-strategy)
+- [Implementation History](#implementation-history)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Glossary
 
@@ -525,5 +530,5 @@ CLI supports the older version, it files a new CSR with the older format.
 [spire-architecture]: https://spiffe.io/docs/latest/spire-about/spire-concepts/
 [spiffe-discussions]: https://github.com/kubernetes/community/blob/master/sig-auth/archive/meeting-notes-2020.md#december-9-11a---noon-pacific-time
 [client-go auth exec mechanism]: https://kubernetes.io/docs/reference/access-authn-authz/authentication/#configuration
-[cloud-provider-gcp implementation]: https://github.com/kubernetes/cloud-provider-gcp/blob/master/cmd/gke-exec-auth-plugin/tpm.go#L76
+[cloud-provider-gcp implementation]: https://github.com/kubernetes/cloud-provider-gcp/blob/release-1.30/cmd/gke-exec-auth-plugin/tpm.go#L76
 [SPIRE's TPM plugin]: https://github.com/bloomberg/spire-tpm-plugin#how-it-works

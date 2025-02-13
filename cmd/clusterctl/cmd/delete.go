@@ -17,33 +17,40 @@ limitations under the License.
 package cmd
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/client"
+	"sigs.k8s.io/cluster-api/cmd/clusterctl/cmd/internal/templates"
 )
 
 type deleteOptions struct {
-	kubeconfig              string
-	kubeconfigContext       string
-	coreProvider            string
-	bootstrapProviders      []string
-	controlPlaneProviders   []string
-	infrastructureProviders []string
-	includeNamespace        bool
-	includeCRDs             bool
-	deleteAll               bool
+	kubeconfig                string
+	kubeconfigContext         string
+	coreProvider              string
+	bootstrapProviders        []string
+	controlPlaneProviders     []string
+	infrastructureProviders   []string
+	ipamProviders             []string
+	runtimeExtensionProviders []string
+	addonProviders            []string
+	includeNamespace          bool
+	includeCRDs               bool
+	deleteAll                 bool
 }
 
 var dd = &deleteOptions{}
 
 var deleteCmd = &cobra.Command{
-	Use:   "delete [providers]",
-	Short: "Delete one or more providers from the management cluster",
-	Long: LongDesc(`
+	Use:     "delete [providers]",
+	GroupID: groupManagement,
+	Short:   "Delete one or more providers from the management cluster",
+	Long: templates.LongDesc(`
 		Delete one or more providers from the management cluster.`),
 
-	Example: Examples(`
+	Example: templates.Examples(`
 		# Deletes the AWS provider
 		# Please note that this implies the deletion of all provider components except the hosting namespace
 		# and the CRDs.
@@ -78,7 +85,7 @@ var deleteCmd = &cobra.Command{
 		# are "orphaned" and thus there may be ongoing costs incurred as a result of this.
 		clusterctl delete --all --include-crd  --include-namespace`),
 	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(*cobra.Command, []string) error {
 		return runDelete()
 	},
 }
@@ -102,6 +109,12 @@ func init() {
 		"Bootstrap providers and versions (e.g. kubeadm:v1.1.5) to delete from the management cluster")
 	deleteCmd.Flags().StringSliceVarP(&dd.controlPlaneProviders, "control-plane", "c", nil,
 		"ControlPlane providers and versions (e.g. kubeadm:v1.1.5) to delete from the management cluster")
+	deleteCmd.Flags().StringSliceVar(&dd.ipamProviders, "ipam", nil,
+		"IPAM providers and versions (e.g. infoblox:v0.0.1) to delete from the management cluster")
+	deleteCmd.Flags().StringSliceVar(&dd.runtimeExtensionProviders, "runtime-extension", nil,
+		"Runtime extension providers and versions (e.g. test:v0.0.1) to delete from the management cluster")
+	deleteCmd.Flags().StringSliceVar(&dd.addonProviders, "addon", nil,
+		"Add-on providers and versions (e.g. helm:v0.1.0) to delete from the management cluster")
 
 	deleteCmd.Flags().BoolVar(&dd.deleteAll, "all", false,
 		"Force deletion of all the providers")
@@ -110,7 +123,9 @@ func init() {
 }
 
 func runDelete() error {
-	c, err := client.New(cfgFile)
+	ctx := context.Background()
+
+	c, err := client.New(ctx, cfgFile)
 	if err != nil {
 		return err
 	}
@@ -118,24 +133,30 @@ func runDelete() error {
 	hasProviderNames := (dd.coreProvider != "") ||
 		(len(dd.bootstrapProviders) > 0) ||
 		(len(dd.controlPlaneProviders) > 0) ||
-		(len(dd.infrastructureProviders) > 0)
+		(len(dd.infrastructureProviders) > 0) ||
+		(len(dd.ipamProviders) > 0) ||
+		(len(dd.runtimeExtensionProviders) > 0) ||
+		(len(dd.addonProviders) > 0)
 
 	if dd.deleteAll && hasProviderNames {
-		return errors.New("The --all flag can't be used in combination with --core, --bootstrap, --control-plane, --infrastructure")
+		return errors.New("The --all flag can't be used in combination with --core, --bootstrap, --control-plane, --infrastructure, --ipam, --extension, --addon")
 	}
 
 	if !dd.deleteAll && !hasProviderNames {
-		return errors.New("At least one of --core, --bootstrap, --control-plane, --infrastructure should be specified or the --all flag should be set")
+		return errors.New("At least one of --core, --bootstrap, --control-plane, --infrastructure, --ipam, --extension, --addon should be specified or the --all flag should be set")
 	}
 
-	return c.Delete(client.DeleteOptions{
-		Kubeconfig:              client.Kubeconfig{Path: dd.kubeconfig, Context: dd.kubeconfigContext},
-		IncludeNamespace:        dd.includeNamespace,
-		IncludeCRDs:             dd.includeCRDs,
-		CoreProvider:            dd.coreProvider,
-		BootstrapProviders:      dd.bootstrapProviders,
-		InfrastructureProviders: dd.infrastructureProviders,
-		ControlPlaneProviders:   dd.controlPlaneProviders,
-		DeleteAll:               dd.deleteAll,
+	return c.Delete(ctx, client.DeleteOptions{
+		Kubeconfig:                client.Kubeconfig{Path: dd.kubeconfig, Context: dd.kubeconfigContext},
+		IncludeNamespace:          dd.includeNamespace,
+		IncludeCRDs:               dd.includeCRDs,
+		CoreProvider:              dd.coreProvider,
+		BootstrapProviders:        dd.bootstrapProviders,
+		InfrastructureProviders:   dd.infrastructureProviders,
+		ControlPlaneProviders:     dd.controlPlaneProviders,
+		IPAMProviders:             dd.ipamProviders,
+		RuntimeExtensionProviders: dd.runtimeExtensionProviders,
+		AddonProviders:            dd.addonProviders,
+		DeleteAll:                 dd.deleteAll,
 	})
 }

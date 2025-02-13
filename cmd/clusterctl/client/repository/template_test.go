@@ -100,7 +100,7 @@ func Test_newTemplate(t *testing.T) {
 				g.Expect(err).To(HaveOccurred())
 				return
 			}
-			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(err).ToNot(HaveOccurred())
 
 			g.Expect(got.Variables()).To(Equal(tt.want.variables))
 			g.Expect(got.TargetNamespace()).To(Equal(tt.want.targetNamespace))
@@ -111,7 +111,7 @@ func Test_newTemplate(t *testing.T) {
 
 			// check variable replaced in components
 			yml, err := got.Yaml()
-			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(yml).To(ContainSubstring(fmt.Sprintf("variable: %s", variableValue)))
 		})
 	}
@@ -153,9 +153,9 @@ metadata:
 	}
 
 	merged, err := MergeTemplates(template1, template2)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(len(merged.Objs())).To(Equal(2))
-	g.Expect(len(merged.VariableMap())).To(Equal(3))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(merged.Objs()).To(HaveLen(2))
+	g.Expect(merged.VariableMap()).To(HaveLen(3))
 
 	// Make sure that the SAME_VARIABLE default value comes from the first template
 	// that defines it

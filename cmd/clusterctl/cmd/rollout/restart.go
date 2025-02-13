@@ -17,10 +17,12 @@ limitations under the License.
 package rollout
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
-	"k8s.io/kubectl/pkg/util/templates"
 
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/client"
+	"sigs.k8s.io/cluster-api/cmd/clusterctl/cmd/internal/templates"
 )
 
 // restartOptions is the start of the data required to perform the operation.
@@ -41,7 +43,10 @@ var (
 
 	restartExample = templates.Examples(`
 		# Restart a machinedeployment
-		clusterctl alpha rollout restart machinedeployment/my-md-0`)
+		clusterctl alpha rollout restart machinedeployment/my-md-0
+
+		# Restart a kubeadmcontrolplane
+		clusterctl alpha rollout restart kubeadmcontrolplane/my-kcp`)
 )
 
 // NewCmdRolloutRestart returns a Command instance for 'rollout restart' sub command.
@@ -68,12 +73,14 @@ func NewCmdRolloutRestart(cfgFile string) *cobra.Command {
 func runRestart(cfgFile string, _ *cobra.Command, args []string) error {
 	restartOpt.resources = args
 
-	c, err := client.New(cfgFile)
+	ctx := context.Background()
+
+	c, err := client.New(ctx, cfgFile)
 	if err != nil {
 		return err
 	}
 
-	return c.RolloutRestart(client.RolloutOptions{
+	return c.RolloutRestart(ctx, client.RolloutRestartOptions{
 		Kubeconfig: client.Kubeconfig{Path: restartOpt.kubeconfig, Context: restartOpt.kubeconfigContext},
 		Namespace:  restartOpt.namespace,
 		Resources:  restartOpt.resources,

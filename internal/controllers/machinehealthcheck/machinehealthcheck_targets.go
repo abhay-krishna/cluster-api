@@ -27,11 +27,14 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/conditions"
+	v1beta2conditions "sigs.k8s.io/cluster-api/util/conditions/v1beta2"
 	"sigs.k8s.io/cluster-api/util/patch"
 )
 
@@ -61,15 +64,6 @@ type healthCheckTarget struct {
 	nodeMissing bool
 }
 
-func (t *healthCheckTarget) string() string {
-	return fmt.Sprintf("%s/%s/%s/%s",
-		t.MHC.GetNamespace(),
-		t.MHC.GetName(),
-		t.Machine.GetName(),
-		t.nodeName(),
-	)
-}
-
 // Get the node name if the target has a node.
 func (t *healthCheckTarget) nodeName() string {
 	if t.Node != nil {
@@ -80,6 +74,7 @@ func (t *healthCheckTarget) nodeName() string {
 
 // Determine whether or not a given target needs remediation.
 // The node will need remediation if any of the following are true:
+// - The Machine has the remediate machine annotation
 // - The Machine has failed for some reason
 // - The Machine did not get a node before `timeoutForMachineToHaveNode` elapses
 // - The Node has gone away
@@ -91,35 +86,56 @@ func (t *healthCheckTarget) needsRemediation(logger logr.Logger, timeoutForMachi
 	var nextCheckTimes []time.Duration
 	now := time.Now()
 
+	if annotations.HasRemediateMachine(t.Machine) {
+		conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.HasRemediateMachineAnnotationReason, clusterv1.ConditionSeverityWarning, "Marked for remediation via remediate-machine annotation")
+		logger.V(3).Info("Target is marked for remediation via remediate-machine annotation")
+
+		v1beta2conditions.Set(t.Machine, metav1.Condition{
+			Type:    clusterv1.MachineHealthCheckSucceededV1Beta2Condition,
+			Status:  metav1.ConditionFalse,
+			Reason:  clusterv1.MachineHealthCheckHasRemediateAnnotationV1Beta2Reason,
+			Message: "Health check failed: marked for remediation via cluster.x-k8s.io/remediate-machine annotation",
+		})
+		return true, time.Duration(0)
+	}
+
 	if t.Machine.Status.FailureReason != nil {
-		conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.MachineHasFailureReason, clusterv1.ConditionSeverityWarning, "FailureReason: %v", t.Machine.Status.FailureReason)
+		conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.MachineHasFailureReason, clusterv1.ConditionSeverityWarning, "FailureReason: %v", *t.Machine.Status.FailureReason)
 		logger.V(3).Info("Target is unhealthy", "failureReason", t.Machine.Status.FailureReason)
 		return true, time.Duration(0)
 	}
 
 	if t.Machine.Status.FailureMessage != nil {
-		conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.MachineHasFailureReason, clusterv1.ConditionSeverityWarning, "FailureMessage: %v", t.Machine.Status.FailureMessage)
+		conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.MachineHasFailureReason, clusterv1.ConditionSeverityWarning, "FailureMessage: %v", *t.Machine.Status.FailureMessage)
 		logger.V(3).Info("Target is unhealthy", "failureMessage", t.Machine.Status.FailureMessage)
 		return true, time.Duration(0)
 	}
 
-	// the node does not exist
+	// Machine has Status.NodeRef set, although we couldn't find the node in the workload cluster.
 	if t.nodeMissing {
 		logger.V(3).Info("Target is unhealthy: node is missing")
 		conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.NodeNotFoundReason, clusterv1.ConditionSeverityWarning, "")
+
+		v1beta2conditions.Set(t.Machine, metav1.Condition{
+			Type:    clusterv1.MachineHealthCheckSucceededV1Beta2Condition,
+			Status:  metav1.ConditionFalse,
+			Reason:  clusterv1.MachineHealthCheckNodeDeletedV1Beta2Reason,
+			Message: fmt.Sprintf("Health check failed: Node %s has been deleted", t.Machine.Status.NodeRef.Name),
+		})
 		return true, time.Duration(0)
 	}
 
-	// Don't penalize any Machine/Node if the control plane has not been initialized.
-	if !conditions.IsTrue(t.Cluster, clusterv1.ControlPlaneInitializedCondition) {
-		logger.V(3).Info("Not evaluating target health because the control plane has not yet been initialized")
+	// Don't penalize any Machine/Node if the control plane has not been initialized
+	// Exception of this rule are control plane machine itself, so the first control plane machine can be remediated.
+	if !conditions.IsTrue(t.Cluster, clusterv1.ControlPlaneInitializedCondition) && !util.IsControlPlaneMachine(t.Machine) {
+		logger.V(5).Info("Not evaluating target health because the control plane has not yet been initialized")
 		// Return a nextCheck time of 0 because we'll get requeued when the Cluster is updated.
 		return false, 0
 	}
 
 	// Don't penalize any Machine/Node if the cluster infrastructure is not ready.
 	if !conditions.IsTrue(t.Cluster, clusterv1.InfrastructureReadyCondition) {
-		logger.V(3).Info("Not evaluating target health because the cluster infrastructure is not ready")
+		logger.V(5).Info("Not evaluating target health because the cluster infrastructure is not ready")
 		// Return a nextCheck time of 0 because we'll get requeued when the Cluster is updated.
 		return false, 0
 	}
@@ -132,29 +148,46 @@ func (t *healthCheckTarget) needsRemediation(logger logr.Logger, timeoutForMachi
 			return false, 0
 		}
 
-		controlPlaneInitializedTime := conditions.GetLastTransitionTime(t.Cluster, clusterv1.ControlPlaneInitializedCondition).Time
-		clusterInfraReadyTime := conditions.GetLastTransitionTime(t.Cluster, clusterv1.InfrastructureReadyCondition).Time
+		controlPlaneInitialized := conditions.GetLastTransitionTime(t.Cluster, clusterv1.ControlPlaneInitializedCondition)
+		clusterInfraReady := conditions.GetLastTransitionTime(t.Cluster, clusterv1.InfrastructureReadyCondition)
+		machineInfraReady := conditions.GetLastTransitionTime(t.Machine, clusterv1.InfrastructureReadyCondition)
 		machineCreationTime := t.Machine.CreationTimestamp.Time
 
-		// Use the latest of the 3 times
+		// Use the latest of the following timestamps.
 		comparisonTime := machineCreationTime
-		logger.V(3).Info("Determining comparison time", "machineCreationTime", machineCreationTime, "clusterInfraReadyTime", clusterInfraReadyTime, "controlPlaneInitializedTime", controlPlaneInitializedTime)
-		if controlPlaneInitializedTime.After(comparisonTime) {
-			comparisonTime = controlPlaneInitializedTime
+		logger.V(5).Info("Determining comparison time",
+			"machineCreationTime", machineCreationTime,
+			"clusterInfraReadyTime", clusterInfraReady,
+			"controlPlaneInitializedTime", controlPlaneInitialized,
+			"machineInfraReadyTime", machineInfraReady,
+		)
+		if conditions.IsTrue(t.Cluster, clusterv1.ControlPlaneInitializedCondition) && controlPlaneInitialized != nil && controlPlaneInitialized.Time.After(comparisonTime) {
+			comparisonTime = controlPlaneInitialized.Time
 		}
-		if clusterInfraReadyTime.After(comparisonTime) {
-			comparisonTime = clusterInfraReadyTime
+		if conditions.IsTrue(t.Cluster, clusterv1.InfrastructureReadyCondition) && clusterInfraReady != nil && clusterInfraReady.Time.After(comparisonTime) {
+			comparisonTime = clusterInfraReady.Time
 		}
-		logger.V(3).Info("Using comparison time", "time", comparisonTime)
+		if conditions.IsTrue(t.Machine, clusterv1.InfrastructureReadyCondition) && machineInfraReady != nil && machineInfraReady.Time.After(comparisonTime) {
+			comparisonTime = machineInfraReady.Time
+		}
+		logger.V(5).Info("Using comparison time", "time", comparisonTime)
 
+		timeoutDuration := timeoutForMachineToHaveNode.Duration
 		if comparisonTime.Add(timeoutForMachineToHaveNode.Duration).Before(now) {
-			conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.NodeStartupTimeoutReason, clusterv1.ConditionSeverityWarning, "Node failed to report startup in %s", timeoutForMachineToHaveNode.String())
-			logger.V(3).Info("Target is unhealthy: machine has no node", "duration", timeoutForMachineToHaveNode.String())
+			conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.NodeStartupTimeoutReason, clusterv1.ConditionSeverityWarning, "Node failed to report startup in %s", timeoutDuration)
+			logger.V(3).Info("Target is unhealthy: machine has no node", "duration", timeoutDuration)
+
+			v1beta2conditions.Set(t.Machine, metav1.Condition{
+				Type:    clusterv1.MachineHealthCheckSucceededV1Beta2Condition,
+				Status:  metav1.ConditionFalse,
+				Reason:  clusterv1.MachineHealthCheckNodeStartupTimeoutV1Beta2Reason,
+				Message: fmt.Sprintf("Health check failed: Node failed to report startup in %s", timeoutDuration),
+			})
 			return true, time.Duration(0)
 		}
 
 		durationUnhealthy := now.Sub(comparisonTime)
-		nextCheck := timeoutForMachineToHaveNode.Duration - durationUnhealthy + time.Second
+		nextCheck := timeoutDuration - durationUnhealthy + time.Second
 
 		return false, nextCheck
 	}
@@ -174,6 +207,13 @@ func (t *healthCheckTarget) needsRemediation(logger logr.Logger, timeoutForMachi
 		if nodeCondition.LastTransitionTime.Add(c.Timeout.Duration).Before(now) {
 			conditions.MarkFalse(t.Machine, clusterv1.MachineHealthCheckSucceededCondition, clusterv1.UnhealthyNodeConditionReason, clusterv1.ConditionSeverityWarning, "Condition %s on node is reporting status %s for more than %s", c.Type, c.Status, c.Timeout.Duration.String())
 			logger.V(3).Info("Target is unhealthy: condition is in state longer than allowed timeout", "condition", c.Type, "state", c.Status, "timeout", c.Timeout.Duration.String())
+
+			v1beta2conditions.Set(t.Machine, metav1.Condition{
+				Type:    clusterv1.MachineHealthCheckSucceededV1Beta2Condition,
+				Status:  metav1.ConditionFalse,
+				Reason:  clusterv1.MachineHealthCheckUnhealthyNodeV1Beta2Reason,
+				Message: fmt.Sprintf("Health check failed: Condition %s on Node is reporting status %s for more than %s", c.Type, c.Status, c.Timeout.Duration.String()),
+			})
 			return true, time.Duration(0)
 		}
 
@@ -199,15 +239,16 @@ func (r *Reconciler) getTargetsFromMHC(ctx context.Context, logger logr.Logger, 
 
 	targets := []healthCheckTarget{}
 	for k := range machines {
+		logger := logger.WithValues("Machine", klog.KObj(&machines[k]))
 		skip, reason := shouldSkipRemediation(&machines[k])
 		if skip {
-			logger.Info("skipping remediation", "machine", machines[k].Name, "reason", reason)
+			logger.Info("Skipping remediation", "reason", reason)
 			continue
 		}
 
 		patchHelper, err := patch.NewHelper(&machines[k], r.Client)
 		if err != nil {
-			return nil, errors.Wrap(err, "unable to initialize patch helper")
+			return nil, err
 		}
 		target := healthCheckTarget{
 			Cluster:     cluster,
@@ -215,16 +256,18 @@ func (r *Reconciler) getTargetsFromMHC(ctx context.Context, logger logr.Logger, 
 			Machine:     &machines[k],
 			patchHelper: patchHelper,
 		}
-		node, err := r.getNodeFromMachine(ctx, clusterClient, target.Machine)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				return nil, errors.Wrap(err, "error getting node")
-			}
+		if clusterClient != nil {
+			node, err := r.getNodeFromMachine(ctx, clusterClient, target.Machine)
+			if err != nil {
+				if !apierrors.IsNotFound(err) {
+					return nil, errors.Wrap(err, "error getting node")
+				}
 
-			// A node has been seen for this machine, but it no longer exists
-			target.nodeMissing = true
+				// A node has been seen for this machine, but it no longer exists
+				target.nodeMissing = true
+			}
+			target.Node = node
 		}
-		target.Node = node
 		targets = append(targets, target)
 	}
 	return targets, nil
@@ -234,7 +277,7 @@ func (r *Reconciler) getTargetsFromMHC(ctx context.Context, logger logr.Logger, 
 // label selector.
 func (r *Reconciler) getMachinesFromMHC(ctx context.Context, mhc *clusterv1.MachineHealthCheck) ([]clusterv1.Machine, error) {
 	selector, err := metav1.LabelSelectorAsSelector(metav1.CloneSelectorAndAddLabel(
-		&mhc.Spec.Selector, clusterv1.ClusterLabelName, mhc.Spec.ClusterName,
+		&mhc.Spec.Selector, clusterv1.ClusterNameLabel, mhc.Spec.ClusterName,
 	))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build selector")
@@ -279,7 +322,7 @@ func (r *Reconciler) healthCheckTargets(targets []healthCheckTarget, logger logr
 	var healthy []healthCheckTarget
 
 	for _, t := range targets {
-		logger = logger.WithValues("Target", t.string())
+		logger := logger.WithValues("Machine", klog.KObj(t.Machine), "Node", klog.KObj(t.Node))
 		logger.V(3).Info("Health checking target")
 		needsRemediation, nextCheck := t.needsRemediation(logger, timeoutForMachineToHaveNode)
 
@@ -294,8 +337,8 @@ func (r *Reconciler) healthCheckTargets(targets []healthCheckTarget, logger logr
 				t.Machine,
 				corev1.EventTypeNormal,
 				EventDetectedUnhealthy,
-				"Machine %v has unhealthy node %v",
-				t.string(),
+				"Machine %s has unhealthy Node %s",
+				klog.KObj(t.Machine),
 				t.nodeName(),
 			)
 			nextCheckTimes = append(nextCheckTimes, nextCheck)
@@ -304,6 +347,12 @@ func (r *Reconciler) healthCheckTargets(targets []healthCheckTarget, logger logr
 
 		if t.Machine.DeletionTimestamp.IsZero() && t.Node != nil {
 			conditions.MarkTrue(t.Machine, clusterv1.MachineHealthCheckSucceededCondition)
+
+			v1beta2conditions.Set(t.Machine, metav1.Condition{
+				Type:   clusterv1.MachineHealthCheckSucceededV1Beta2Condition,
+				Status: metav1.ConditionTrue,
+				Reason: clusterv1.MachineHealthCheckSucceededV1Beta2Reason,
+			})
 			healthy = append(healthy, t)
 		}
 	}

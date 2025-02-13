@@ -16,9 +16,6 @@ limitations under the License.
 
 package secret
 
-// Purpose is the name to append to the secret generated for a cluster.
-type Purpose string
-
 const (
 	// KubeconfigDataName is the key used to store a Kubeconfig in the secret's data field.
 	KubeconfigDataName = "value"
@@ -29,6 +26,14 @@ const (
 	// TLSCrtDataName is the key used to store a TLS certificate in the secret's data field.
 	TLSCrtDataName = "tls.crt"
 
+	// RegistryCredentials is the secret name of secret containing registryMirror credentials.
+	RegistryCredentials = "registry-credentials"
+)
+
+// Purpose is the name to append to the secret generated for a cluster.
+type Purpose string
+
+const (
 	// Kubeconfig is the secret name suffix storing the Cluster Kubeconfig.
 	Kubeconfig = Purpose("kubeconfig")
 
@@ -36,16 +41,18 @@ const (
 	ClusterCA = Purpose("ca")
 
 	// EtcdCA is the secret name suffix for the Etcd CA.
-	EtcdCA Purpose = "etcd"
+	EtcdCA = Purpose("etcd")
 
 	// ServiceAccount is the secret name suffix for the Service Account keys.
-	ServiceAccount Purpose = "sa"
+	ServiceAccount = Purpose("sa")
 
 	// FrontProxyCA is the secret name suffix for Front Proxy CA.
-	FrontProxyCA Purpose = "proxy"
+	FrontProxyCA = Purpose("proxy")
 
 	// APIServerEtcdClient is the secret name of user-supplied secret containing the apiserver-etcd-client key/cert.
-	APIServerEtcdClient Purpose = "apiserver-etcd-client"
+	APIServerEtcdClient = Purpose("apiserver-etcd-client")
+
+	ManagedExternalEtcdCA = Purpose("managed-etcd")
 )
 
 var (

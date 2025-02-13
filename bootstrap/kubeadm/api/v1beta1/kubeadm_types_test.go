@@ -18,14 +18,72 @@ package v1beta1
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 )
 
-func TestMarshalJSON(t *testing.T) {
+func TestNodeRegistrationOptionsMarshalJSON(t *testing.T) {
+	var tests = []struct {
+		name     string
+		opts     NodeRegistrationOptions
+		expected string
+	}{
+		{
+			name: "marshal nil taints",
+			opts: NodeRegistrationOptions{
+				Name:                  "node-1",
+				CRISocket:             "unix:///var/run/containerd/containerd.sock",
+				Taints:                nil,
+				KubeletExtraArgs:      map[string]string{"abc": "def"},
+				IgnorePreflightErrors: []string{"ignore-1"},
+			},
+			expected: `{"name":"node-1","criSocket":"unix:///var/run/containerd/containerd.sock","kubeletExtraArgs":{"abc":"def"},"ignorePreflightErrors":["ignore-1"]}`,
+		},
+		{
+			name: "marshal empty taints",
+			opts: NodeRegistrationOptions{
+				Name:                  "node-1",
+				CRISocket:             "unix:///var/run/containerd/containerd.sock",
+				Taints:                []corev1.Taint{},
+				KubeletExtraArgs:      map[string]string{"abc": "def"},
+				IgnorePreflightErrors: []string{"ignore-1"},
+			},
+			expected: `{"name":"node-1","criSocket":"unix:///var/run/containerd/containerd.sock","taints":[],"kubeletExtraArgs":{"abc":"def"},"ignorePreflightErrors":["ignore-1"]}`,
+		},
+		{
+			name: "marshal regular taints",
+			opts: NodeRegistrationOptions{
+				Name:      "node-1",
+				CRISocket: "unix:///var/run/containerd/containerd.sock",
+				Taints: []corev1.Taint{
+					{
+						Key:    "key",
+						Value:  "value",
+						Effect: "effect",
+					},
+				},
+				KubeletExtraArgs:      map[string]string{"abc": "def"},
+				IgnorePreflightErrors: []string{"ignore-1"},
+			},
+			expected: `{"name":"node-1","criSocket":"unix:///var/run/containerd/containerd.sock","taints":[{"key":"key","value":"value","effect":"effect"}],"kubeletExtraArgs":{"abc":"def"},"ignorePreflightErrors":["ignore-1"]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			b, err := tt.opts.MarshalJSON()
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(string(b)).To(Equal(tt.expected))
+		})
+	}
+}
+
+func TestBootstrapTokenStringMarshalJSON(t *testing.T) {
 	var tests = []struct {
 		bts      BootstrapTokenString
 		expected string
@@ -39,13 +97,13 @@ func TestMarshalJSON(t *testing.T) {
 			g := NewWithT(t)
 
 			b, err := json.Marshal(rt.bts)
-			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(string(b)).To(Equal(rt.expected))
 		})
 	}
 }
 
-func TestUnmarshalJSON(t *testing.T) {
+func TestBootstrapTokenStringUnmarshalJSON(t *testing.T) {
 	var tests = []struct {
 		input         string
 		bts           *BootstrapTokenString
@@ -69,14 +127,14 @@ func TestUnmarshalJSON(t *testing.T) {
 			if rt.expectedError {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 			}
-			g.Expect(newbts).To(Equal(rt.bts))
+			g.Expect(newbts).To(BeComparableTo(rt.bts))
 		})
 	}
 }
 
-func TestJSONRoundtrip(t *testing.T) {
+func TestBootstrapTokenStringJSONRoundtrip(t *testing.T) {
 	var tests = []struct {
 		input string
 		bts   *BootstrapTokenString
@@ -98,7 +156,7 @@ func roundtrip(input string, bts *BootstrapTokenString) error {
 	var err error
 	newbts := &BootstrapTokenString{}
 	// If string input was specified, roundtrip like this: string -> (unmarshal) -> object -> (marshal) -> string
-	if len(input) > 0 {
+	if input != "" {
 		if err := json.Unmarshal([]byte(input), newbts); err != nil {
 			return errors.Wrap(err, "expected no unmarshal error, got error")
 		}
@@ -119,18 +177,19 @@ func roundtrip(input string, bts *BootstrapTokenString) error {
 		if err := json.Unmarshal(b, newbts); err != nil {
 			return errors.Wrap(err, "expected no unmarshal error, got error")
 		}
-		if !reflect.DeepEqual(bts, newbts) {
+		if diff := cmp.Diff(bts, newbts); diff != "" {
 			return errors.Errorf(
-				"expected object: %v\n\t  actual: %v",
+				"expected object: %v\n\t  actual: %v\n\t got diff: %v",
 				bts,
 				newbts,
+				diff,
 			)
 		}
 	}
 	return nil
 }
 
-func TestTokenFromIDAndSecret(t *testing.T) {
+func TestBootstrapTokenStringTokenFromIDAndSecret(t *testing.T) {
 	var tests = []struct {
 		bts      BootstrapTokenString
 		expected string
@@ -179,9 +238,9 @@ func TestNewBootstrapTokenString(t *testing.T) {
 			if rt.expectedError {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 			}
-			g.Expect(actual).To(Equal(rt.bts))
+			g.Expect(actual).To(BeComparableTo(rt.bts))
 		})
 	}
 }

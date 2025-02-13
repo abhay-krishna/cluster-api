@@ -1,6 +1,6 @@
 # clusterctl Configuration File
 
-The `clusterctl` config file is located at `$HOME/.cluster-api/clusterctl.yaml`.
+The `clusterctl` config file is located at `$XDG_CONFIG_HOME/cluster-api/clusterctl.yaml`.
 It can be used to:
 
 - Customize the list of providers and provider repositories.
@@ -9,7 +9,7 @@ It can be used to:
 
 ## Provider repositories
 
-The `clusterctl` CLI is designed to work with providers implementing the [clusterctl Provider Contract](provider-contract.md).
+The `clusterctl` CLI is designed to work with providers implementing the [clusterctl Provider Contract](../developer/providers/contracts/clusterctl.md).
 
 Each provider is expected to define a provider repository, a well-known place where release assets are published.
 
@@ -39,7 +39,9 @@ providers:
     type: "BootstrapProvider"
 ```
 
-See [provider contract](provider-contract.md) for instructions about how to set up a provider repository.
+See [provider contract](../developer/providers/contracts/clusterctl.md) for instructions about how to set up a provider repository.
+
+**Note**: It is possible to use the `${HOME}` and `${CLUSTERCTL_REPOSITORY_PATH}` environment variables in `url`.
 
 ## Variables
 
@@ -57,6 +59,9 @@ variables in the `clusterctl` config file:
 AWS_B64ENCODED_CREDENTIALS: XXXXXXXX
 ```
 
+The format of keys should always be `UPPERCASE_WITH_UNDERSCORE` for both OS environment variables and in the `clusterctl`
+config file (NOTE: this limitation derives from [Viper](https://github.com/spf13/viper), the library we are using internally to retrieve variables).
+
 In case a variable is defined both in the config file and as an OS environment variable,
 the environment variable takes precedence.
 
@@ -70,8 +75,10 @@ wants to use a different repository, it is possible to use the following configu
 
 ```yaml
 cert-manager:
-  url: "/Users/foo/.cluster-api/dev-repository/cert-manager/latest/cert-manager.yaml"
+  url: "/Users/foo/.config/cluster-api/dev-repository/cert-manager/latest/cert-manager.yaml"
 ```
+
+**Note**: It is possible to use the `${HOME}` and `${CLUSTERCTL_REPOSITORY_PATH}` environment variables in `url`.
 
 Similarly, it is possible to override the default version installed by clusterctl by configuring:
 
@@ -93,7 +100,30 @@ The value string is a possibly signed sequence of decimal numbers, each with opt
 
 If no value is specified, or the format is invalid, the default value of 10 minutes will be used.
 
-Please note that the configuration above will be considered also when doing `clusterctl upgrade plan` or `clusterctl upgrade plan`.
+Please note that the configuration above will be considered also when doing `clusterctl upgrade plan` or `clusterctl upgrade apply`.
+
+## Migrating to user-managed cert-manager
+
+You may want to migrate to a user-managed cert-manager further down the line, after initialising cert-manager on the management cluster through `clusterctl`.
+
+`clusterctl` looks for the label `clusterctl.cluster.x-k8s.io/core=cert-manager` on all api resources in the `cert-manager` namespace. If it finds the label, `clusterctl` will manage the cert-manager deployment. You can list all the resources with that label by running:
+```bash
+kubectl api-resources --verbs=list -o name | xargs -n 1 kubectl get --show-kind --ignore-not-found -A --selector=clusterctl.cluster.x-k8s.io/core=cert-manager
+```
+
+If you want to manage and install your own cert-manager, you'll need to remove this label from all API resources.
+
+<aside class="note warning">
+
+<h1>Warning</h1>
+
+Cluster API has a direct dependency on cert-manager. It's possible you could encounter issues if you use a different version to the Cluster API default version.
+
+</aside>
+
+## Avoiding GitHub rate limiting
+
+Follow [this](./overview.md#avoiding-github-rate-limiting)
 
 ## Overrides Layer
 
@@ -107,7 +137,7 @@ Overrides only provide file replacements; instead, provider version resolution i
 
 `clusterctl` uses an overrides layer to read in injected provider components,
 cluster templates and metadata. By default, it reads the files from
-`$HOME/.cluster-api/overrides`.
+`$XDG_CONFIG_HOME/cluster-api/overrides`.
 
 The directory structure under the `overrides` directory should follow the
 template:
@@ -163,6 +193,7 @@ run,
 ```bash
 clusterctl init --infrastructure aws:v0.5.0 -v5
 ```
+
 ```bash
 ...
 Using Override="infrastructure-components.yaml" Provider="infrastructure-aws" Version="v0.5.0"
@@ -176,6 +207,8 @@ directory in the clusterctl config file as
 ```yaml
 overridesFolder: /Users/foobar/workspace/dev-releases
 ```
+
+**Note**: It is possible to use the `${HOME}` and `${CLUSTERCTL_REPOSITORY_PATH}` environment variables in `overridesFolder`.
 
 ## Image overrides
 
@@ -232,9 +265,9 @@ images:
 
 To have more verbose logs you can use the `-v` flag when running the `clusterctl` and set the level of the logging verbose with a positive integer number, ie. `-v 3`.
 
-If you do not want to use the flag every time you issue a command you can set the environment variable `CLUSTERCTL_LOG_LEVEL` or set the variable in the `clusterctl` config file located by default at `$HOME/.cluster-api/clusterctl.yaml`.
+If you do not want to use the flag every time you issue a command you can set the environment variable `CLUSTERCTL_LOG_LEVEL` or set the variable in the `clusterctl` config file located by default at `$XDG_CONFIG_HOME/cluster-api/clusterctl.yaml`.
 
 
 ## Skip checking for updates
 
-`clusterctl` automatically checks for new versions every time it is used. If you do not want `clusterctl` to check for new updates you can set the environment variable `CLUSTERCTL_DISABLE_VERSIONCHECK` to `"true"` or set the variable in the `clusterctl` config file located by default at `$HOME/.cluster-api/clusterctl.yaml`.
+`clusterctl` automatically checks for new versions every time it is used. If you do not want `clusterctl` to check for new updates you can set the environment variable `CLUSTERCTL_DISABLE_VERSIONCHECK` to `"true"` or set the variable in the `clusterctl` config file located by default at `$XDG_CONFIG_HOME/cluster-api/clusterctl.yaml`.

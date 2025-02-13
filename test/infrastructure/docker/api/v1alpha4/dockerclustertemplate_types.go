@@ -26,9 +26,13 @@ type DockerClusterTemplateSpec struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
+// +kubebuilder:deprecatedversion
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time duration since creation of DockerClusterTemplate"
 
 // DockerClusterTemplate is the Schema for the dockerclustertemplates API.
+//
+// Deprecated: This type will be removed in one of the next releases.
 type DockerClusterTemplate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -40,6 +44,8 @@ type DockerClusterTemplate struct {
 // +kubebuilder:resource:path=dockerclustertemplates,scope=Namespaced,categories=cluster-api
 
 // DockerClusterTemplateList contains a list of DockerClusterTemplate.
+//
+// Deprecated: This type will be removed in one of the next releases.
 type DockerClusterTemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -47,7 +53,7 @@ type DockerClusterTemplateList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&DockerClusterTemplate{}, &DockerClusterTemplateList{})
+	objectTypes = append(objectTypes, &DockerClusterTemplate{}, &DockerClusterTemplateList{})
 }
 
 // DockerClusterTemplateResource describes the data needed to create a DockerCluster from a template.

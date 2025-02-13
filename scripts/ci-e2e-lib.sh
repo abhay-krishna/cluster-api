@@ -14,38 +14,77 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# capi:buildDockerImages builds all the CAPI (and CAPD) docker images, if not already present locally.
+# capi:buildDockerImages builds all the required docker images, if not already present locally.
 capi:buildDockerImages () {
   # Configure provider images generation;
-  # please ensure the generated image name matches image names used in the E2E_CONF_FILE
+  # please ensure the generated image name matches image names used in the E2E_CONF_FILE;
+  # also the same settings must be set in Makefile, docker-build-e2e target.
   ARCH="$(go env GOARCH)"
   export REGISTRY=gcr.io/k8s-staging-cluster-api
   export TAG=dev
   export ARCH
-  export PULL_POLICY=IfNotPresent
 
-  ## Build all Cluster API provider images, if missing
+  ## Build all required docker image, if missing.
+  ## Note: we check only for one image to exist, and assume that if one is missing all are missing.
   if [[ "$(docker images -q "$REGISTRY/cluster-api-controller-$ARCH:$TAG" 2> /dev/null)" == "" ]]; then
-    echo "+ Building CAPI images"
-    make docker-build
+    echo "+ Building CAPI images and CAPD image"
+    make docker-build-e2e
   else
     echo "+ CAPI images already present in the system, skipping make"
   fi
+}
 
-  ## Build CAPD provider images, if missing
-  if [[ "$(docker images -q "$REGISTRY/capd-manager-$ARCH:$TAG" 2> /dev/null)" == "" ]]; then
-    echo "+ Building CAPD images"
-    make docker-capd-build
-  else
-    echo "+ CAPD images already present in the system, skipping make"
+# k8s::prepareKindestImagesVariables defaults the environment variables KUBERNETES_VERSION_MANAGEMENT, KUBERNETES_VERSION,
+# KUBERNETES_VERSION_UPGRADE_TO, KUBERNETES_VERSION_UPGRADE_FROM and KUBERNETES_VERSION_LATEST_CI
+# depending on what is set in GINKGO_FOCUS.
+# Note: We do this to ensure that the kindest/node image gets built if it does
+# not already exist, e.g. for pre-releases, but only if necessary.
+k8s::prepareKindestImagesVariables() {
+  # Always default KUBERNETES_VERSION_MANAGEMENT because we always create a management cluster out of it.
+  if [[ -z "${KUBERNETES_VERSION_MANAGEMENT:-}" ]]; then
+    KUBERNETES_VERSION_MANAGEMENT=$(grep KUBERNETES_VERSION_MANAGEMENT: < "$E2E_CONF_FILE" | awk -F'"' '{ print $2}')
+    echo "Defaulting KUBERNETES_VERSION_MANAGEMENT to ${KUBERNETES_VERSION_MANAGEMENT} to trigger image build (because env var is not set)"
   fi
 
-  ## Build test extension images, if missing
-  if [[ "$(docker images -q "$REGISTRY/test-extension-$ARCH:$TAG" 2> /dev/null)" == "" ]]; then
-    echo "+ Building test-extension image"
-    make docker-build-test-extension
-  else
-    echo "+ test-extension image already present in the system, skipping make"
+  if [[ ${GINKGO_FOCUS:-} == *"K8s-Install-ci-latest"* ]]; then
+    # If the test focuses on [K8s-Install-ci-latest], only default KUBERNETES_VERSION_LATEST_CI
+    # to the value in the e2e config and only if it is not set.
+    # Note: We do this because we want to specify KUBERNETES_VERSION_LATEST_CI *only* in the e2e config.
+    if [[ -z "${KUBERNETES_VERSION_LATEST_CI:-}" ]]; then
+      KUBERNETES_VERSION_LATEST_CI=$(grep KUBERNETES_VERSION_LATEST_CI: < "$E2E_CONF_FILE" | awk -F'"' '{ print $2}')
+      echo "Defaulting KUBERNETES_VERSION_LATEST_CI to ${KUBERNETES_VERSION_LATEST_CI} to trigger image build (because env var is not set)"
+    fi
+  elif [[ ${GINKGO_FOCUS:-} != *"K8s-Upgrade"* ]]; then
+    # In any other case which is not [K8s-Upgrade], default KUBERNETES_VERSION if it is not set to make sure
+    # the corresponding kindest/node image exists.
+    if [[ -z "${KUBERNETES_VERSION:-}" ]]; then
+      KUBERNETES_VERSION=$(grep KUBERNETES_VERSION: < "$E2E_CONF_FILE" | awk -F'"' '{ print $2}')
+      echo "Defaulting KUBERNETES_VERSION to ${KUBERNETES_VERSION} to trigger image build (because env var is not set)"
+    fi
+  fi
+
+  # Tests not focusing on anything and skipping [Conformance] run a clusterctl upgrade test
+  # on the latest kubernetes version as management cluster.
+  if  [[ ${GINKGO_FOCUS:-} == "" ]] && [[ ${GINKGO_SKIP} == *"Conformance"* ]]; then
+    # Note: We do this because we want to specify KUBERNETES_VERSION_LATEST_CI *only* in the e2e config.
+    if [[ -z "${KUBERNETES_VERSION_LATEST_CI:-}" ]]; then
+      KUBERNETES_VERSION_LATEST_CI=$(grep KUBERNETES_VERSION_LATEST_CI: < "$E2E_CONF_FILE" | awk -F'"' '{ print $2}')
+      echo "Defaulting KUBERNETES_VERSION_LATEST_CI to ${KUBERNETES_VERSION_LATEST_CI} to trigger image build (because env var is not set)"
+    fi
+  fi
+
+  # Tests not focusing on [PR-Blocking], [K8s-Install] or [K8s-Install-ci-latest],
+  # also run upgrade tests so default KUBERNETES_VERSION_UPGRADE_TO and KUBERNETES_VERSION_UPGRADE_FROM
+  # to the value in the e2e config if they are not set.
+  if [[ ${GINKGO_FOCUS:-} != *"PR-Blocking"* ]] && [[ ${GINKGO_FOCUS:-} != *"K8s-Install"* ]]; then
+    if [[ -z "${KUBERNETES_VERSION_UPGRADE_TO:-}" ]]; then
+      KUBERNETES_VERSION_UPGRADE_TO=$(grep KUBERNETES_VERSION_UPGRADE_TO: < "$E2E_CONF_FILE" | awk -F'"' '{ print $2}')
+      echo "Defaulting KUBERNETES_VERSION_UPGRADE_TO to ${KUBERNETES_VERSION_UPGRADE_TO} to trigger image build (because env var is not set)"
+    fi
+    if [[ -z "${KUBERNETES_VERSION_UPGRADE_FROM:-}" ]]; then
+      KUBERNETES_VERSION_UPGRADE_FROM=$(grep KUBERNETES_VERSION_UPGRADE_FROM: < "$E2E_CONF_FILE" | awk -F'"' '{ print $2}')
+      echo "Defaulting KUBERNETES_VERSION_UPGRADE_FROM to ${KUBERNETES_VERSION_UPGRADE_FROM} to trigger image build (because env var is not set)"
+    fi
   fi
 }
 
@@ -80,6 +119,13 @@ k8s::prepareKindestImages() {
     kind::prepareKindestImage "$resolveVersion"
   fi
 
+  if [ -n "${KUBERNETES_VERSION_LATEST_CI:-}" ]; then
+    k8s::resolveVersion "KUBERNETES_VERSION_LATEST_CI" "$KUBERNETES_VERSION_LATEST_CI"
+    export KUBERNETES_VERSION_LATEST_CI=$resolveVersion
+
+    kind::prepareKindestImage "$resolveVersion"
+  fi
+
   if [ -n "${BUILD_NODE_IMAGE_TAG:-}" ]; then
     k8s::resolveVersion "BUILD_NODE_IMAGE_TAG" "$BUILD_NODE_IMAGE_TAG"
     export BUILD_NODE_IMAGE_TAG=$resolveVersion
@@ -99,6 +145,7 @@ k8s::resolveVersion() {
 
   resolveVersion=$version
   if [[ "$version" =~ ^v ]]; then
+    echo "+ $variableName=\"$version\" already a version, no need to resolve"
     return
   fi
 
@@ -115,12 +162,15 @@ k8s::resolveVersion() {
 kind::prepareKindestImage() {
   local version=$1
 
+  # ALWAYS_BUILD_KIND_IMAGES will default to false if unset.
+  ALWAYS_BUILD_KIND_IMAGES="${ALWAYS_BUILD_KIND_IMAGES:-"false"}"
+
   # Try to pre-pull the image
   kind::prepullImage "kindest/node:$version"
 
-  # if pre-pull failed, falling back to local build
-  if [[ "$retVal" != 0 ]]; then
-    echo "+ image for Kuberentes $version is not available in docker hub, trying local build"
+  # if pre-pull failed, or ALWAYS_BUILD_KIND_IMAGES is true build the images locally.
+ if [[ "$retVal" != 0 ]] || [[ "$ALWAYS_BUILD_KIND_IMAGES" = "true" ]]; then
+    echo "+ building image for Kuberentes $version locally. This is either because the image wasn't available in docker hub or ALWAYS_BUILD_KIND_IMAGES is set to true"
     kind::buildNodeImage "$version"
   fi
 }
@@ -142,8 +192,13 @@ kind::buildNodeImage() {
 
   # build the node image
   version="${version//+/_}"
-  echo "+ Building kindest/node:$version"
-  kind build node-image --image "kindest/node:$version"
+  if [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(beta|rc).[0-9]+$ ]]; then
+    echo "+ Building kindest/node:$version using pre-built binaries"
+    kind build node-image --image "kindest/node:$version" "$version"
+  else
+    echo "+ Building kindest/node:$version from source"
+    kind build node-image --image "kindest/node:$version"
+  fi
 
   # move back to Cluster API
   cd "$REPO_ROOT" || exit
@@ -215,9 +270,9 @@ EOL
 # the actual test run less sensible to the network speed.
 kind:prepullAdditionalImages () {
   # Pulling cert manager images so we can pre-load in kind nodes
-  kind::prepullImage "quay.io/jetstack/cert-manager-cainjector:v1.8.2"
-  kind::prepullImage "quay.io/jetstack/cert-manager-webhook:v1.8.2"
-  kind::prepullImage "quay.io/jetstack/cert-manager-controller:v1.8.2"
+  kind::prepullImage "quay.io/jetstack/cert-manager-cainjector:v1.16.2"
+  kind::prepullImage "quay.io/jetstack/cert-manager-webhook:v1.16.2"
+  kind::prepullImage "quay.io/jetstack/cert-manager-controller:v1.16.2"
 }
 
 # kind:prepullImage pre-pull a docker image if no already present locally.

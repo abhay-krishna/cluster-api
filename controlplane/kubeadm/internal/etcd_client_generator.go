@@ -38,27 +38,27 @@ type EtcdClientGenerator struct {
 	createClient clientCreator
 }
 
-type clientCreator func(ctx context.Context, endpoints []string) (*etcd.Client, error)
+type clientCreator func(ctx context.Context, endpoint string) (*etcd.Client, error)
 
 var errEtcdNodeConnection = errors.New("failed to connect to etcd node")
 
 // NewEtcdClientGenerator returns a new etcdClientGenerator instance.
-func NewEtcdClientGenerator(restConfig *rest.Config, tlsConfig *tls.Config, etcdDialTimeout time.Duration) *EtcdClientGenerator {
+func NewEtcdClientGenerator(restConfig *rest.Config, tlsConfig *tls.Config, etcdDialTimeout, etcdCallTimeout time.Duration) *EtcdClientGenerator {
 	ecg := &EtcdClientGenerator{restConfig: restConfig, tlsConfig: tlsConfig}
 
-	ecg.createClient = func(ctx context.Context, endpoints []string) (*etcd.Client, error) {
+	ecg.createClient = func(ctx context.Context, endpoint string) (*etcd.Client, error) {
 		p := proxy.Proxy{
 			Kind:       "pods",
 			Namespace:  metav1.NamespaceSystem,
 			KubeConfig: ecg.restConfig,
-			TLSConfig:  ecg.tlsConfig,
 			Port:       2379,
 		}
 		return etcd.NewClient(ctx, etcd.ClientConfiguration{
-			Endpoints:   endpoints,
+			Endpoint:    endpoint,
 			Proxy:       p,
 			TLSConfig:   tlsConfig,
 			DialTimeout: etcdDialTimeout,
+			CallTimeout: etcdCallTimeout,
 		})
 	}
 
@@ -69,14 +69,14 @@ func NewEtcdClientGenerator(restConfig *rest.Config, tlsConfig *tls.Config, etcd
 func (c *EtcdClientGenerator) forFirstAvailableNode(ctx context.Context, nodeNames []string) (*etcd.Client, error) {
 	// This is an additional safeguard for avoiding this func to return nil, nil.
 	if len(nodeNames) == 0 {
-		return nil, errors.New("invalid argument: forLeader can't be called with an empty list of nodes")
+		return nil, errors.New("invalid argument: forFirstAvailableNode can't be called with an empty list of nodes")
 	}
 
 	// Loop through the existing control plane nodes.
 	var errs []error
 	for _, name := range nodeNames {
-		endpoints := []string{staticPodName("etcd", name)}
-		client, err := c.createClient(ctx, endpoints)
+		endpoint := staticPodName("etcd", name)
+		client, err := c.createClient(ctx, endpoint)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -93,7 +93,7 @@ func (c *EtcdClientGenerator) forLeader(ctx context.Context, nodeNames []string)
 		return nil, errors.New("invalid argument: forLeader can't be called with an empty list of nodes")
 	}
 
-	nodes := sets.NewString()
+	nodes := sets.Set[string]{}
 	for _, n := range nodeNames {
 		nodes.Insert(n)
 	}
@@ -118,7 +118,7 @@ func (c *EtcdClientGenerator) forLeader(ctx context.Context, nodeNames []string)
 // getLeaderClient provides an etcd client connected to the leader. It returns an
 // errEtcdNodeConnection if there was a connection problem with the given etcd
 // node, which should be considered non-fatal by the caller.
-func (c *EtcdClientGenerator) getLeaderClient(ctx context.Context, nodeName string, allNodes sets.String) (*etcd.Client, error) {
+func (c *EtcdClientGenerator) getLeaderClient(ctx context.Context, nodeName string, allNodes sets.Set[string]) (*etcd.Client, error) {
 	// Get a temporary client to the etcd instance hosted on the node.
 	client, err := c.forFirstAvailableNode(ctx, []string{nodeName})
 	if err != nil {

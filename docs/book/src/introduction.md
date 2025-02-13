@@ -6,18 +6,24 @@ Started by the Kubernetes Special Interest Group (SIG) [Cluster Lifecycle](https
 
 ## Getting started
 
-* [Quick start](./user/quick-start.md)
+* [Quick Start](./user/quick-start.md)
 * [Concepts](./user/concepts.md)
-* [Developer guide](./developer/guide.md)
+* [Developer guide](./developer/getting-started.md)
 * [Contributing](./CONTRIBUTING.md)
-* [Videos explaining Cluster API architecture](./developer/guide.md#videos-explaining-capi-architecture-and-code-walkthroughs)
+* [Videos explaining Cluster API architecture](./developer/getting-started.md#videos-explaining-capi-architecture-and-code-walkthroughs)
 
 <aside class="note">
 
 <h1>ClusterAPI documentation versions</h1>
 
-This book documents ClusterAPI v1.3. For other Cluster API versions please see the corresponding documentation:
+This book documents ClusterAPI v1.9. For other Cluster API versions please see the corresponding documentation:
 * [main.cluster-api.sigs.k8s.io](https://main.cluster-api.sigs.k8s.io)
+* [release-1-8.cluster-api.sigs.k8s.io](https://release-1-8.cluster-api.sigs.k8s.io)
+* [release-1-7.cluster-api.sigs.k8s.io](https://release-1-7.cluster-api.sigs.k8s.io)
+* [release-1-6.cluster-api.sigs.k8s.io](https://release-1-6.cluster-api.sigs.k8s.io)
+* [release-1-5.cluster-api.sigs.k8s.io](https://release-1-5.cluster-api.sigs.k8s.io)
+* [release-1-4.cluster-api.sigs.k8s.io](https://release-1-4.cluster-api.sigs.k8s.io)
+* [release-1-3.cluster-api.sigs.k8s.io](https://release-1-3.cluster-api.sigs.k8s.io)
 * [release-1-2.cluster-api.sigs.k8s.io](https://release-1-2.cluster-api.sigs.k8s.io)
 * [release-1-1.cluster-api.sigs.k8s.io](https://release-1-1.cluster-api.sigs.k8s.io)
 * [release-1-0.cluster-api.sigs.k8s.io](https://release-1-0.cluster-api.sigs.k8s.io)
@@ -40,6 +46,23 @@ However, while kubeadm and other bootstrap providers reduce installation complex
 
 SIG Cluster Lifecycle began the Cluster API project as a way to address these gaps by building declarative, Kubernetes-style APIs, that automate cluster creation, configuration, and management. Using this model, Cluster API can also be extended to support any infrastructure provider (AWS, Azure, vSphere, etc.) or bootstrap provider (kubeadm is default) you need. See the growing list of [available providers](./reference/providers.md).
 
-{{#include ../../scope-and-objectives.md:Goals}}
+### Goals
+
+- To manage the lifecycle (create, scale, upgrade, destroy) of Kubernetes-conformant clusters using a declarative API.
+- To work in different environments, both on-premises and in the cloud.
+- To define common operations, provide a default implementation, and provide the ability to swap out implementations for alternative ones.
+- To reuse and integrate existing ecosystem components rather than duplicating their functionality (e.g. node-problem-detector, cluster autoscaler, SIG-Multi-cluster).
+- To provide a transition path for Kubernetes lifecycle products to adopt Cluster API incrementally. Specifically, existing cluster lifecycle management tools should be able to adopt Cluster API in a staged manner, over the course of multiple releases, or even adopting a subset of Cluster API.
+
+### Non-goals
+
+- To add these APIs to Kubernetes core (kubernetes/kubernetes).
+    -  This API should live in a namespace outside the core and follow the best practices defined by api-reviewers, but is not subject to core-api constraints.
+- To manage the lifecycle of infrastructure unrelated to the running of Kubernetes-conformant clusters.
+- To force all Kubernetes lifecycle products (kOps, Kubespray, GKE, AKS, EKS, IKS etc.) to support or use these APIs.
+- To manage non-Cluster API provisioned Kubernetes-conformant clusters.
+- To manage a single cluster spanning multiple infrastructure providers.
+- To configure a machine at any time other than create or upgrade.
+- To duplicate functionality that exists or is coming to other tooling, e.g., updating kubelet configuration (c.f. dynamic kubelet configuration), or updating apiserver, controller-manager, scheduler configuration (c.f. component-config effort) after the cluster is deployed.
 
 {{#include ../../../README.md:Community}}

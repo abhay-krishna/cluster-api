@@ -20,43 +20,43 @@ limitations under the License.
 package e2e
 
 import (
-	"github.com/blang/semver"
-	. "github.com/onsi/ginkgo"
+	"github.com/blang/semver/v4"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
+
+	clusterctlcluster "sigs.k8s.io/cluster-api/cmd/clusterctl/client/cluster"
+	"sigs.k8s.io/cluster-api/test/framework"
 )
 
-var _ = Describe("When upgrading a workload cluster using ClusterClass with RuntimeSDK [PR-Informing] [ClusterClass]", func() {
-	clusterUpgradeWithRuntimeSDKSpec(ctx, func() clusterUpgradeWithRuntimeSDKSpecInput {
-		// "upgrades" is the same as the "topology" flavor but with an additional MachinePool.
-		flavor := pointer.String("upgrades-runtimesdk")
-		// For KubernetesVersionUpgradeFrom < v1.24 we have to use upgrades-cgroupfs flavor.
-		// This is because kind and CAPD only support:
-		// * cgroupDriver cgroupfs for Kubernetes < v1.24
-		// * cgroupDriver systemd for Kubernetes >= v1.24.
-		// Notes:
-		// * We always use a ClusterClass-based cluster-template for the upgrade test
-		// * The ClusterClass will automatically adjust the cgroupDriver for KCP and MDs.
-		// * We have to handle the MachinePool ourselves
-		// * The upgrades-cgroupfs flavor uses an MP which is pinned to cgroupfs
-		// * During the upgrade UpgradeMachinePoolAndWait automatically drops the cgroupfs pinning
-		//   when the target version is >= v1.24.
-		// TODO: We can remove this after the v1.25 release as we then only test the v1.24=>v1.25 upgrade.
+var _ = Describe("When upgrading a workload cluster using ClusterClass with RuntimeSDK [ClusterClass]", func() {
+	ClusterUpgradeWithRuntimeSDKSpec(ctx, func() ClusterUpgradeWithRuntimeSDKSpecInput {
 		version, err := semver.ParseTolerant(e2eConfig.GetVariable(KubernetesVersionUpgradeFrom))
 		Expect(err).ToNot(HaveOccurred(), "Invalid argument, KUBERNETES_VERSION_UPGRADE_FROM is not a valid version")
 		if version.LT(semver.MustParse("1.24.0")) {
-			// "upgrades-cgroupfs" is the same as the "topology" flavor but with an additional MachinePool
-			// with pinned cgroupDriver to cgroupfs.
-			flavor = pointer.String("upgrades-runtimesdk-cgroupfs")
+			Fail("This test only supports upgrades from Kubernetes >= v1.24.0")
 		}
 
-		return clusterUpgradeWithRuntimeSDKSpecInput{
-			E2EConfig:             e2eConfig,
-			ClusterctlConfigPath:  clusterctlConfigPath,
-			BootstrapClusterProxy: bootstrapClusterProxy,
-			ArtifactFolder:        artifactFolder,
-			SkipCleanup:           skipCleanup,
-			Flavor:                flavor,
+		return ClusterUpgradeWithRuntimeSDKSpecInput{
+			E2EConfig:              e2eConfig,
+			ClusterctlConfigPath:   clusterctlConfigPath,
+			BootstrapClusterProxy:  bootstrapClusterProxy,
+			ArtifactFolder:         artifactFolder,
+			SkipCleanup:            skipCleanup,
+			InfrastructureProvider: ptr.To("docker"),
+			PostUpgrade: func(proxy framework.ClusterProxy, namespace, clusterName string) {
+				// This check ensures that the resourceVersions are stable, i.e. it verifies there are no
+				// continuous reconciles when everything should be stable.
+				framework.ValidateResourceVersionStable(ctx, proxy, namespace, clusterctlcluster.FilterClusterObjectsWithNameFilter(clusterName))
+			},
+			// "upgrades" is the same as the "topology" flavor but with an additional MachinePool.
+			Flavor: ptr.To("upgrades-runtimesdk"),
+			// The runtime extension gets deployed to the test-extension-system namespace and is exposed
+			// by the test-extension-webhook-service.
+			// The below values are used when creating the cluster-wide ExtensionConfig to refer
+			// the actual service.
+			ExtensionServiceNamespace: "test-extension-system",
+			ExtensionServiceName:      "test-extension-webhook-service",
 		}
 	})
 })

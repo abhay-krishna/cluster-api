@@ -20,11 +20,12 @@ feedback and suggestions.
             * [Owner References](#owner-references)
          * [The Cluster API contract](#the-cluster-api-contract)
          * [Logging](#logging)
+         * [Testing](#testing)
 
 ## Resources
 
 - [Writing inclusive documentation](https://developers.google.com/style/inclusive-documentation)
-- [Contributor Summit NA 2019: Keeping the Bar High - How to be a bad ass Code Reviewer](https://www.youtube.com/watch?v=OZVv7-o8i40)
+- [Contributor Summit NA 2019: Keeping the Bar High - How to be a bad-ass Code Reviewer](https://www.youtube.com/watch?v=OZVv7-o8i40)
 - [Code Review Developer Guide - Google](https://google.github.io/eng-practices/review/)
 - [The Gentle Art Of Patch Review](https://sage.thesharps.us/2014/09/01/the-gentle-art-of-patch-review/)
 
@@ -105,7 +106,7 @@ By extension, the Cluster API contract includes all the util methods that Cluste
 making the development of providers simpler and consistent (e.g. everything under `/util` or in  `/test/framework`);
 documentation of the utility is available [here](https://pkg.go.dev/sigs.k8s.io/cluster-api?tab=subdirectories).
 
-The Cluster API contract is linked to the version of the API (e.g. v1alpha3 Contract), and it is expected to
+The Cluster API contract is linked to the version of the API (e.g. v1beta1 Contract), and it is expected to
 provide the same set of guarantees in terms of support window, stability, and upgradability. 
 
 This makes any change that can impact the Cluster API contract critical and usually:
@@ -119,12 +120,15 @@ This makes any change that can impact the Cluster API contract critical and usua
 
 ### Logging
 
-- For CAPI controllers see [Kubernetes logging conventions](https://git.k8s.io/community/contributors/devel/sig-instrumentation/logging.md).
+While developing controllers in Cluster API a key requirement is to add logging to observe the system and
+to help troubleshooting issues.
+
+- For CAPI controllers see [Cluster API logging conventions](https://cluster-api.sigs.k8s.io/developer/logging.html).
 - For clusterctl see [clusterctl logging conventions](https://github.com/kubernetes-sigs/cluster-api/blob/main/cmd/clusterctl/log/doc.go).
 
 ### Testing
 
-Testing plays an crucial role in ensuring the long term maintainability of the project.
+Testing plays a crucial role in ensuring the long term maintainability of the project.
 
 In Cluster API we are committed to have a good test coverage and also to have a nice and consistent style in implementing
 tests. For more information see [testing Cluster API](https://cluster-api.sigs.k8s.io/developer/testing.html).  

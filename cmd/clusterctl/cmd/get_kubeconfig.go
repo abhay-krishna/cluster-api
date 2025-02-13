@@ -17,6 +17,7 @@ limitations under the License.
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -24,6 +25,7 @@ import (
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/client"
+	"sigs.k8s.io/cluster-api/cmd/clusterctl/cmd/internal/templates"
 )
 
 type getKubeconfigOptions struct {
@@ -35,25 +37,25 @@ type getKubeconfigOptions struct {
 var gk = &getKubeconfigOptions{}
 
 var getKubeconfigCmd = &cobra.Command{
-	Use:   "kubeconfig",
+	Use:   "kubeconfig NAME",
 	Short: "Gets the kubeconfig file for accessing a workload cluster",
-	Long: LongDesc(`
+	Long: templates.LongDesc(`
 		Gets the kubeconfig file for accessing a workload cluster`),
 
-	Example: Examples(`
+	Example: templates.Examples(`
 		# Get the workload cluster's kubeconfig.
 		clusterctl get kubeconfig <name of workload cluster>
 
 		# Get the workload cluster's kubeconfig in a particular namespace.
 		clusterctl get kubeconfig <name of workload cluster> --namespace foo`),
 
-	Args: func(cmd *cobra.Command, args []string) error {
+	Args: func(_ *cobra.Command, args []string) error {
 		if len(args) != 1 {
 			return errors.New("please specify a workload cluster name")
 		}
 		return nil
 	},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		return runGetKubeconfig(args[0])
 	},
 }
@@ -79,7 +81,9 @@ func init() {
 }
 
 func runGetKubeconfig(workloadClusterName string) error {
-	c, err := client.New(cfgFile)
+	ctx := context.Background()
+
+	c, err := client.New(ctx, cfgFile)
 	if err != nil {
 		return err
 	}
@@ -90,7 +94,7 @@ func runGetKubeconfig(workloadClusterName string) error {
 		Namespace:           gk.namespace,
 	}
 
-	out, err := c.GetKubeconfig(options)
+	out, err := c.GetKubeconfig(ctx, options)
 	if err != nil {
 		return err
 	}

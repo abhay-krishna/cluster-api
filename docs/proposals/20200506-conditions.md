@@ -6,51 +6,75 @@ reviewers:
   - "@vincepri"
   - "@ncdc"
 creation-date: 2020-05-06
-last-updated: 2020-05-20
-status: implementable
-see-also:
-replaces:
-superseded-by:
+last-updated: 2024-05-03
+status: replaced
+superseded-by: 20240916-improve-status-in-CAPI-resources.md
 ---
+
+# IMPORTANT! Superseded by [Improve Status in CAPI resources](20240916-improve-status-in-CAPI-resources.md)
+
+This proposal is now superseded by [Improve Status in CAPI resources](20240916-improve-status-in-CAPI-resources.md), 
+which describes how Cluster API is going to transition to Kubernetes aligned conditions (among other improvements).
+
+The [Improve Status in CAPI resources](20240916-improve-status-in-CAPI-resources.md) proposal is part of the work for 
+implementing Cluster API v1beta2 APIs, while "legacy" conditions described in this document are used in v1beta1 API version.
+
+The v1beta1 API types, including the "legacy" condition types described in this document are going to be deprecated
+when v1beta2 will be released (tentative Apr 2025).
+
+Providers implementing conditions won't be required to do the transition from "legacy" Cluster API Condition type
+to Kubernetes `metav1.Conditions` type, but this transition is recommended because it improves the consistency of each provider
+with Kubernetes, Cluster API and the ecosystem.
+
+However, providers choosing to keep using Cluster API "legacy" conditions should be aware that starting from the
+CAPI release when v1beta1 removal will happen (tentative Apr 2026), the Cluster API project will remove the
+Cluster API "legacy" condition types, the "legacy" `util/conditions` package, the code handling "legacy" conditions in
+`util/patch.Helper` and everything related to the "legacy" Cluster API `v1beta.Condition` type.
+
+In other words, providers choosing to keep using Cluster API "legacy" conditions should be aware that down the line
+they will be required to start managing their own conditions fork/custom implementation.
 
 # Conditions - Cluster status at glance
 
 ## Table of Contents
 
-- [Conditions - Cluster status at glance](#conditions---cluster-status-at-glance)
-  - [Table of Contents](#table-of-contents)
-  - [Glossary](#glossary)
-  - [Summary](#summary)
-  - [Motivation](#motivation)
-     - [Goals](#goals)
-     - [Non-Goals/Future Work](#non-goalsfuture-work)
-  - [Proposal](#proposal)
-     - [User Stories](#user-stories)
-        - [Story 1](#story-1)
-        - [Story 2](#story-2)
-        - [Story 3](#story-3)
-        - [Story 4](#story-4)
-     - [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
-        - [Data Model Changes](#data-model-changes)
-        - [Constraints](#constraints)
-           - [Condition semantic](#condition-semantic)
-           - [The Ready condition](#the-ready-condition)
-           - [Controller changes](#controller-changes)
-        - [The cluster provisioning workflow](#the-cluster-provisioning-workflow)
-           - [The ClusterInfrastructureReady condition](#the-clusterinfrastructureready-condition)
-           - [The cluster’s ControlPlaneReady condition](#the-clusters-controlplaneready-condition)
-           - [The cluster’s WorkersReady condition](#the-clusters-workersready-condition)
-     - [The control plane upgrade workflow](#the-control-plane-upgrade-workflow)
-     - [Risks and Mitigations](#risks-and-mitigations)
-  - [Alternatives](#alternatives)
-     - [Kubernetes Conditions](#kubernetes-conditions)
-     - [Status field](#status-field)
-  - [Upgrade Strategy](#upgrade-strategy)
-  - [Additional Details](#additional-details)
-     - [Test Plan [optional]](#test-plan-optional)
-     - [Graduation Criteria [optional]](#graduation-criteria-optional)
-     - [Version Skew Strategy [optional]](#version-skew-strategy-optional)
-  - [Implementation History](#implementation-history)
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Glossary](#glossary)
+- [Summary](#summary)
+- [Motivation](#motivation)
+  - [Goals](#goals)
+  - [Non-Goals/Future Work](#non-goalsfuture-work)
+- [Proposal](#proposal)
+  - [User Stories](#user-stories)
+    - [Story 1](#story-1)
+    - [Story 2](#story-2)
+    - [Story 3](#story-3)
+    - [Story 4](#story-4)
+  - [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
+    - [Data Model Changes](#data-model-changes)
+    - [Constraints](#constraints)
+      - [Condition semantic](#condition-semantic)
+      - [The Ready condition](#the-ready-condition)
+      - [Controller changes](#controller-changes)
+    - [The cluster provisioning workflow](#the-cluster-provisioning-workflow)
+      - [The `ClusterInfrastructureReady` condition](#the-clusterinfrastructureready-condition)
+      - [The cluster’s `ControlPlaneReady` condition](#the-clusters-controlplaneready-condition)
+      - [The cluster’s `WorkersReady` condition](#the-clusters-workersready-condition)
+  - [The control plane upgrade workflow](#the-control-plane-upgrade-workflow)
+  - [Risks and Mitigations](#risks-and-mitigations)
+- [Alternatives](#alternatives)
+  - [Kubernetes Conditions](#kubernetes-conditions)
+  - [Status field](#status-field)
+- [Upgrade Strategy](#upgrade-strategy)
+- [Additional Details](#additional-details)
+  - [Test Plan [optional]](#test-plan-optional)
+  - [Graduation Criteria [optional]](#graduation-criteria-optional)
+  - [Version Skew Strategy [optional]](#version-skew-strategy-optional)
+- [Implementation History](#implementation-history)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Glossary
 
@@ -229,7 +253,7 @@ const (
 )
 ```
 
-Condition types MUST have a consistent polarity (i.e. "True = good");
+Condition type names should make sense for humans; neither positive nor negative polarity can be recommended as a general rule.
 
 Condition types SHOULD have one of the following suffix:
 
@@ -240,8 +264,9 @@ When the above suffix are not adequate for a specific condition type, other suff
 (e.g. `Completed`, `Healthy`); however, it is recommended to balance this flexibility with the objective to provide
 a consistent condition naming across all the Cluster API objects.
 
-The `Severity` field MUST be set only when `Status=False` and it is designed to provide a standard classification
-of possible conditions failure `Reason`. 
+The `Severity` field MUST be set only when `Status=False` for conditions with positive polarity, or when `Status=True`
+for conditions with negative polarity; severity is designed to provide a standard classification of possible
+conditions failure `Reason`. 
 
 Please note that the combination of `Reason` and `Severity` gives different meaning to a condition failure
 allowing to detect when a long-running task is still ongoing:
@@ -295,6 +320,8 @@ the following constraints/design principles MUST be applied:
   of the underlying `Machines.Status.Conditions[Ready]` conditions.
 - A corollary of the above set of constraints is that an object SHOULD NEVER be in status `Ready=True`
   if one of the object's conditions are `false` or if one of the object dependents is in status `Ready=False`.
+- Condition that do not represent the operational state of the component, MUST not be included in the  `Ready` condition
+  (e.g. `Paused`, which represent a state of the controller that manages the component).
 
 ##### Controller changes
 
@@ -468,6 +495,7 @@ enhance the condition utilities to handle those situations in a generalized way.
 - Risk: This proposal aims to be consistent with the target state of conditions in Kubernetes, but this
   is still under definition (see [KEP](https://github.com/kubernetes/enhancements/pull/1624)).
   - Mitigation: Periodically re-evaluate this proposal vs the Kubernetes KEP. 
+    -  2024-05-03: Change to allow conditions without positive polarity goes into this direction
 
 - Risk: Cluster API presents some specific challenges that are not common to the core Kubernetes objects.
   - Mitigation: To allow a minimal set of carefully evaluated differences between Cluster API and Kubernetes
@@ -477,25 +505,6 @@ enhance the condition utilities to handle those situations in a generalized way.
 - Risk: This proposal allows for implementing conditions in incremental fashion, and this makes it complex
   to ensure a consistent approach across all objects.
   - Mitigation: Ensure all the implementations comply with the defined set of constraints/design principles. 
-
-- Risk: Having a consistent polarity ensures a simple and clear contract with the consumers, and it allows 
-  processing conditions in a simple and consistent way without being forced to implement specific logic
-  for each condition type. However, we are aware about the fact that enforcing of consistent polarity (truthy)
-  combined with the usage of recommended suffix for condition types can lead to verbal contortions to express 
-  conditions, especially in case of conditions designed to signal problems or in case of conditions
-  that might exist or not.
-  - Mitigation: We are relaxing the rule about recommended suffix and allowing usage of custom suffix.
-  - Mitigation: We are recommending the condition adhere to the design principle to express the operational state
-    of the component, and this should help in avoiding conditions name to surface internal implementation details.
-  - Mitigation: We should recommend condition implementers to clearly document the meaning of Unknown state, because as
-    discussed also in the recent [Kubernetes KEP about standardizing conditions](https://github.com/kubernetes/enhancements/pull/1624#pullrequestreview-388777427),
-    _"Unknown" is a fact about the writer of the condition, and not a claim about the object_.
-  - Mitigation: We should recommend developers of code relying on conditions to treat Unknown as a separated state vs
-    assimilating it to True or False, because this can vary case by case and generate confusion in readers.
-    
-  As a final consideration about the risk related to using a consistent polarity, it is important to notice that a
-  consistent polarity ensure a clear meaning for True or o False states, which is already an improvement vs having
-  different interpretations for all the three possible condition states.
   
 ## Alternatives
 
@@ -566,5 +575,7 @@ NA
 
 ## Implementation History
 
-- [ ] 2020-04-27: Compile a Google Doc following the CAEP template
-- [ ] 2020-05-06: Create CAEP PR 
+- [x] 2020-04-27: Compile a Google Doc following the CAEP template
+- [x] 2020-05-06: Create CAEP PR 
+- [x] 2024-05-03: Edited allowing conditions with negative polarity 
+- [x] 2024-09-17: Superseded by [Improve Status in CAPI resources](20240916-improve-status-in-CAPI-resources.md)

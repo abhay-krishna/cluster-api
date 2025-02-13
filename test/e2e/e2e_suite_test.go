@@ -20,6 +20,7 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -27,10 +28,11 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -67,6 +69,9 @@ var (
 var (
 	ctx = ctrl.SetupSignalHandler()
 
+	// watchesCtx is used in log streaming to be able to get canceld via cancelWatches after ending the test suite.
+	watchesCtx, cancelWatches = context.WithCancel(ctx)
+
 	// e2eConfig to be used for this test, read from configPath.
 	e2eConfig *clusterctl.E2EConfig
 
@@ -74,7 +79,7 @@ var (
 	// with the providers specified in the configPath.
 	clusterctlConfigPath string
 
-	// bootstrapClusterProvider manages provisioning of the the bootstrap cluster to be used for the e2e tests.
+	// bootstrapClusterProvider manages provisioning of the bootstrap cluster to be used for the e2e tests.
 	// Please note that provisioning will be skipped if e2e.use-existing-cluster is provided.
 	bootstrapClusterProvider bootstrap.ClusterProvider
 
@@ -94,6 +99,8 @@ func init() {
 func TestE2E(t *testing.T) {
 	g := NewWithT(t)
 
+	ctrl.SetLogger(klog.Background())
+
 	// If running in prow, make sure to use the artifacts folder that will be reported in test grid (ignoring the value provided by flag).
 	if prowArtifactFolder, exists := os.LookupEnv("ARTIFACTS"); exists {
 		artifactFolder = prowArtifactFolder
@@ -110,8 +117,7 @@ func TestE2E(t *testing.T) {
 		defer w.Close()
 	}
 
-	junitReporter := framework.CreateJUnitReporterForProw(artifactFolder)
-	RunSpecsWithDefaultAndCustomReporters(t, "capi-e2e", []Reporter{junitReporter})
+	RunSpecs(t, "capi-e2e")
 }
 
 // Using a SynchronizedBeforeSuite for controlling how to create resources shared across ParallelNodes (~ginkgo threads).
@@ -240,11 +246,14 @@ func setupBootstrapCluster(config *clusterctl.E2EConfig, scheme *runtime.Scheme,
 }
 
 func initBootstrapCluster(bootstrapClusterProxy framework.ClusterProxy, config *clusterctl.E2EConfig, clusterctlConfig, artifactFolder string) {
-	clusterctl.InitManagementClusterAndWatchControllerLogs(ctx, clusterctl.InitManagementClusterAndWatchControllerLogsInput{
-		ClusterProxy:            bootstrapClusterProxy,
-		ClusterctlConfigPath:    clusterctlConfig,
-		InfrastructureProviders: config.InfrastructureProviders(),
-		LogFolder:               filepath.Join(artifactFolder, "clusters", bootstrapClusterProxy.GetName()),
+	clusterctl.InitManagementClusterAndWatchControllerLogs(watchesCtx, clusterctl.InitManagementClusterAndWatchControllerLogsInput{
+		ClusterProxy:              bootstrapClusterProxy,
+		ClusterctlConfigPath:      clusterctlConfig,
+		InfrastructureProviders:   config.InfrastructureProviders(),
+		IPAMProviders:             config.IPAMProviders(),
+		RuntimeExtensionProviders: config.RuntimeExtensionProviders(),
+		AddonProviders:            config.AddonProviders(),
+		LogFolder:                 filepath.Join(artifactFolder, "clusters", bootstrapClusterProxy.GetName()),
 	}, config.GetIntervals(bootstrapClusterProxy.GetName(), "wait-controllers")...)
 }
 
@@ -286,6 +295,7 @@ func dumpBootstrapClusterLogs(bootstrapClusterProxy framework.ClusterProxy) {
 }
 
 func tearDown(bootstrapClusterProvider bootstrap.ClusterProvider, bootstrapClusterProxy framework.ClusterProxy) {
+	cancelWatches()
 	if bootstrapClusterProxy != nil {
 		bootstrapClusterProxy.Dispose(ctx)
 	}

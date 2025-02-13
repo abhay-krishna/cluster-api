@@ -19,7 +19,7 @@ package v1alpha4
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	clusterv1alpha4 "sigs.k8s.io/cluster-api/api/v1alpha4"
+	clusterv1alpha4 "sigs.k8s.io/cluster-api/internal/apis/core/v1alpha4"
 )
 
 const (
@@ -95,9 +95,13 @@ type APIEndpoint struct {
 // +kubebuilder:resource:path=dockerclusters,scope=Namespaced,categories=cluster-api
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
+// +kubebuilder:deprecatedversion
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Time duration since creation of DockerCluster"
 
 // DockerCluster is the Schema for the dockerclusters API.
+//
+// Deprecated: This type will be removed in one of the next releases.
 type DockerCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -119,6 +123,8 @@ func (c *DockerCluster) SetConditions(conditions clusterv1alpha4.Conditions) {
 // +kubebuilder:object:root=true
 
 // DockerClusterList contains a list of DockerCluster.
+//
+// Deprecated: This type will be removed in one of the next releases.
 type DockerClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -126,5 +132,5 @@ type DockerClusterList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&DockerCluster{}, &DockerClusterList{})
+	objectTypes = append(objectTypes, &DockerCluster{}, &DockerClusterList{})
 }

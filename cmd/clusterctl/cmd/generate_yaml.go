@@ -17,6 +17,7 @@ limitations under the License.
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/client"
+	"sigs.k8s.io/cluster-api/cmd/clusterctl/cmd/internal/templates"
 )
 
 type generateYAMLOptions struct {
@@ -36,7 +38,7 @@ var gyOpts = &generateYAMLOptions{}
 var generateYamlCmd = &cobra.Command{
 	Use:   "yaml",
 	Short: "Process yaml using clusterctl's yaml processor",
-	Long: LongDesc(`
+	Long: templates.LongDesc(`
 		Process yaml using clusterctl's yaml processor.
 
 		clusterctl ships with a simple yaml processor that performs variable
@@ -45,7 +47,7 @@ var generateYamlCmd = &cobra.Command{
 		Variable values are either sourced from the clusterctl config file or
 		from environment variables`),
 
-	Example: Examples(`
+	Example: templates.Examples(`
 		# Generates a configuration file with variable values using
 		a template from a specific URL.
 		clusterctl generate yaml --from https://github.com/foo-org/foo-repository/blob/main/cluster-template.yaml
@@ -61,7 +63,7 @@ var generateYamlCmd = &cobra.Command{
 		cat ~/workspace/cluster-template.yaml | clusterctl generate yaml --list-variables
 `),
 
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(*cobra.Command, []string) error {
 		return generateYAML(os.Stdin, os.Stdout)
 	},
 }
@@ -79,7 +81,9 @@ func init() {
 }
 
 func generateYAML(r io.Reader, w io.Writer) error {
-	c, err := client.New(cfgFile)
+	ctx := context.Background()
+
+	c, err := client.New(ctx, cfgFile)
 	if err != nil {
 		return err
 	}
@@ -97,7 +101,7 @@ func generateYAML(r io.Reader, w io.Writer) error {
 			}
 		}
 	}
-	printer, err := c.ProcessYAML(options)
+	printer, err := c.ProcessYAML(ctx, options)
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ limitations under the License.
 package client
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -42,7 +43,7 @@ func Test_clusterctlClient_Delete(t *testing.T) {
 		name          string
 		fields        fields
 		args          args
-		wantProviders sets.String
+		wantProviders sets.Set[string]
 		wantErr       bool
 	}{
 		{
@@ -63,7 +64,28 @@ func Test_clusterctlClient_Delete(t *testing.T) {
 					DeleteAll:               true, // delete all the providers
 				},
 			},
-			wantProviders: sets.NewString(),
+			wantProviders: sets.Set[string]{},
+			wantErr:       false,
+		},
+		{
+			name: "Delete all the providers including CRDs",
+			fields: fields{
+				client: fakeClusterForDelete(),
+			},
+			args: args{
+				options: DeleteOptions{
+					Kubeconfig:              Kubeconfig{Path: "kubeconfig", Context: "mgmt-context"},
+					IncludeNamespace:        false,
+					IncludeCRDs:             true,
+					SkipInventory:           false,
+					CoreProvider:            "",
+					BootstrapProviders:      nil,
+					InfrastructureProviders: nil,
+					ControlPlaneProviders:   nil,
+					DeleteAll:               true, // delete all the providers
+				},
+			},
+			wantProviders: sets.Set[string]{},
 			wantErr:       false,
 		},
 		{
@@ -84,7 +106,7 @@ func Test_clusterctlClient_Delete(t *testing.T) {
 					DeleteAll:               false,
 				},
 			},
-			wantProviders: sets.NewString(
+			wantProviders: sets.Set[string]{}.Insert(
 				capiProviderConfig.Name(),
 				clusterctlv1.ManifestLabel(controlPlaneProviderConfig.Name(), controlPlaneProviderConfig.Type()),
 				clusterctlv1.ManifestLabel(infraProviderConfig.Name(), infraProviderConfig.Type())),
@@ -108,7 +130,7 @@ func Test_clusterctlClient_Delete(t *testing.T) {
 					DeleteAll:               false,
 				},
 			},
-			wantProviders: sets.NewString(
+			wantProviders: sets.Set[string]{}.Insert(
 				capiProviderConfig.Name(),
 				clusterctlv1.ManifestLabel(bootstrapProviderConfig.Name(), bootstrapProviderConfig.Type()),
 				clusterctlv1.ManifestLabel(controlPlaneProviderConfig.Name(), controlPlaneProviderConfig.Type())),
@@ -132,7 +154,7 @@ func Test_clusterctlClient_Delete(t *testing.T) {
 					DeleteAll:               false,
 				},
 			},
-			wantProviders: sets.NewString(
+			wantProviders: sets.Set[string]{}.Insert(
 				capiProviderConfig.Name(),
 				clusterctlv1.ManifestLabel(bootstrapProviderConfig.Name(), bootstrapProviderConfig.Type()),
 				clusterctlv1.ManifestLabel(controlPlaneProviderConfig.Name(), controlPlaneProviderConfig.Type()),
@@ -157,7 +179,7 @@ func Test_clusterctlClient_Delete(t *testing.T) {
 					DeleteAll:               false,
 				},
 			},
-			wantProviders: sets.NewString(
+			wantProviders: sets.Set[string]{}.Insert(
 				clusterctlv1.ManifestLabel(controlPlaneProviderConfig.Name(), controlPlaneProviderConfig.Type()),
 				clusterctlv1.ManifestLabel(infraProviderConfig.Name(), infraProviderConfig.Type())),
 			wantErr: false,
@@ -167,44 +189,48 @@ func Test_clusterctlClient_Delete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			err := tt.fields.client.Delete(tt.args.options)
+			ctx := context.Background()
+
+			err := tt.fields.client.Delete(ctx, tt.args.options)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
 			}
-			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(err).ToNot(HaveOccurred())
 
 			input := cluster.Kubeconfig(tt.args.options.Kubeconfig)
 			proxy := tt.fields.client.clusters[input].Proxy()
 			gotProviders := &clusterctlv1.ProviderList{}
 
-			c, err := proxy.NewClient()
-			g.Expect(err).NotTo(HaveOccurred())
+			c, err := proxy.NewClient(ctx)
+			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(c.List(ctx, gotProviders)).To(Succeed())
 
-			gotProvidersSet := sets.NewString()
+			gotProvidersSet := sets.Set[string]{}
 			for _, gotProvider := range gotProviders.Items {
 				gotProvidersSet.Insert(gotProvider.Name)
 			}
 
-			g.Expect(gotProvidersSet).To(Equal(tt.wantProviders))
+			g.Expect(gotProvidersSet).To(BeComparableTo(tt.wantProviders))
 		})
 	}
 }
 
 // clusterctl client for a management cluster with capi and bootstrap provider.
 func fakeClusterForDelete() *fakeClient {
-	config1 := newFakeConfig().
+	ctx := context.Background()
+
+	config1 := newFakeConfig(ctx).
 		WithVar("var", "value").
 		WithProvider(capiProviderConfig).
 		WithProvider(bootstrapProviderConfig).
 		WithProvider(controlPlaneProviderConfig).
 		WithProvider(infraProviderConfig)
 
-	repository1 := newFakeRepository(capiProviderConfig, config1)
-	repository2 := newFakeRepository(bootstrapProviderConfig, config1)
-	repository3 := newFakeRepository(controlPlaneProviderConfig, config1)
-	repository4 := newFakeRepository(infraProviderConfig, config1)
+	repository1 := newFakeRepository(ctx, capiProviderConfig, config1)
+	repository2 := newFakeRepository(ctx, bootstrapProviderConfig, config1)
+	repository3 := newFakeRepository(ctx, controlPlaneProviderConfig, config1)
+	repository4 := newFakeRepository(ctx, infraProviderConfig, config1)
 
 	cluster1 := newFakeCluster(cluster.Kubeconfig{Path: "kubeconfig", Context: "mgmt-context"}, config1)
 	cluster1.fakeProxy.WithProviderInventory(capiProviderConfig.Name(), capiProviderConfig.Type(), providerVersion, "capi-system")
@@ -213,7 +239,7 @@ func fakeClusterForDelete() *fakeClient {
 	cluster1.fakeProxy.WithProviderInventory(infraProviderConfig.Name(), infraProviderConfig.Type(), providerVersion, namespace)
 	cluster1.fakeProxy.WithFakeCAPISetup()
 
-	client := newFakeClient(config1).
+	client := newFakeClient(ctx, config1).
 		// fake repository for capi, bootstrap, controlplane and infra provider (matching provider's config)
 		WithRepository(repository1).
 		WithRepository(repository2).

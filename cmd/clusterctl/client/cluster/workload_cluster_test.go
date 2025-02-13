@@ -17,6 +17,7 @@ limitations under the License.
 package cluster
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -55,7 +56,7 @@ users:
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test1-kubeconfig",
 				Namespace: "test",
-				Labels:    map[string]string{clusterv1.ClusterLabelName: "test1"},
+				Labels:    map[string]string{clusterv1.ClusterNameLabel: "test1"},
 			},
 			Data: map[string][]byte{
 				secret.KubeconfigDataName: []byte(validKubeConfig),
@@ -84,8 +85,10 @@ users:
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
+			ctx := context.Background()
+
 			wc := newWorkloadCluster(tt.proxy)
-			data, err := wc.GetKubeconfig("test1", "test")
+			data, err := wc.GetKubeconfig(ctx, "test1", "test")
 
 			if tt.expectErr {
 				g.Expect(err).To(HaveOccurred())

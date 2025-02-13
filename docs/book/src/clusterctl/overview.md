@@ -22,6 +22,20 @@ Below you can find a list of main clusterctl commands:
 
 For the full list of clusterctl commands please refer to [commands](commands/commands.md).
 
+### Avoiding GitHub rate limiting
+
+While using providers hosted on GitHub, clusterctl is calling GitHub API which are rate limited; for normal usage free tier is enough but when using clusterctl extensively users might hit the rate limit.
+
+To avoid rate limiting for the public repos set the `GITHUB_TOKEN` environment variable. To generate a token [follow this](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) documentation. The token only needs `repo` scope for clusterctl.
+
+Per default `clusterctl` will use a go proxy to detect the available versions to prevent additional
+API calls to the GitHub API. It is possible to configure the go proxy url using the `GOPROXY` variable as
+for go itself (defaults to `https://proxy.golang.org`).
+To immediately fallback to the GitHub client and not use a go proxy, the environment variable could get set to
+`GOPROXY=off` or `GOPROXY=direct`.
+If a provider does not follow Go's semantic versioning, `clusterctl` may fail when detecting the correct version.
+In such cases, disabling the go proxy functionality via `GOPROXY=off` should be considered.
+
 # Installing clusterctl
 Instructions are available in the [Quick Start](../user/quick-start.md#install-clusterctl).
 

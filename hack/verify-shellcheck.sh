@@ -17,7 +17,16 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-VERSION="v0.7.0"
+if [[ "${TRACE-0}" == "1" ]]; then
+    set -o xtrace
+fi
+
+if [ $# -ne 1 ]; then
+  echo 1>&2 "$0: usage: ./verify-shellcheck.sh <version>"
+  exit 2
+fi
+
+VERSION=${1}
 
 OS="unknown"
 if [[ "${OSTYPE}" == "linux"* ]]; then
@@ -64,9 +73,7 @@ fi
 
 echo "Running shellcheck..."
 cd "${ROOT_PATH}" || exit
-IGNORE_FILES=$(find . -name "*.sh" | grep "third_party\|tilt_modules")
-echo "Ignoring shellcheck on ${IGNORE_FILES}"
-FILES=$(find . -name "*.sh" -not -path "./tilt_modules/*" -not -path "*third_party*")
+FILES=$(find . -name "*.sh")
 while read -r file; do
     "$SHELLCHECK" -x "$file" >> "${OUT}" 2>&1
 done <<< "$FILES"

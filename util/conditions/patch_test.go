@@ -124,7 +124,7 @@ func TestNewPatch(t *testing.T) {
 				return
 			}
 			g.Expect(err).To(Not(HaveOccurred()))
-			g.Expect(got).To(Equal(tt.want))
+			g.Expect(got).To(BeComparableTo(tt.want))
 		})
 	}
 }
@@ -283,6 +283,14 @@ func TestApply(t *testing.T) {
 			want:    conditionList(fooFalse), // after condition should be kept in case of error
 			wantErr: false,
 		},
+		{
+			name:    "Error when nil passed as an ApplyOption",
+			before:  getterWithConditions(fooTrue),
+			after:   getterWithConditions(fooFalse),
+			latest:  setterWithConditions(),
+			options: []ApplyOption{nil},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -329,5 +337,5 @@ func TestApplyDoesNotAlterLastTransitionTime(t *testing.T) {
 	err = diff.Apply(latest)
 
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(latest.GetConditions()).To(Equal(after.GetConditions()))
+	g.Expect(latest.GetConditions()).To(BeComparableTo(after.GetConditions()))
 }

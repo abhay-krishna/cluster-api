@@ -23,12 +23,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	"sigs.k8s.io/cluster-api/controllers/clustercache"
 	machinepool "sigs.k8s.io/cluster-api/exp/internal/controllers"
 )
 
 // MachinePoolReconciler reconciles a MachinePool object.
 type MachinePoolReconciler struct {
-	Client client.Client
+	Client       client.Client
+	APIReader    client.Reader
+	ClusterCache clustercache.ClusterCache
 
 	// WatchFilterValue is the label value used to filter events prior to reconciliation.
 	WatchFilterValue string
@@ -37,6 +40,8 @@ type MachinePoolReconciler struct {
 func (r *MachinePoolReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
 	return (&machinepool.MachinePoolReconciler{
 		Client:           r.Client,
+		APIReader:        r.APIReader,
+		ClusterCache:     r.ClusterCache,
 		WatchFilterValue: r.WatchFilterValue,
 	}).SetupWithManager(ctx, mgr, options)
 }

@@ -73,6 +73,35 @@ type InitConfiguration struct {
 type ClusterConfiguration struct {
 	metav1.TypeMeta `json:",inline"`
 
+	// Pause holds the image source for pause container
+	// This is only for bottlerocket
+	// +optional
+	Pause Pause `json:"pause,omitempty"`
+
+	// BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
+
+	// BottlerocketAdmin holds the image source for admin container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketAdmin BottlerocketAdmin `json:"bottlerocketAdmin,omitempty"`
+	// BottlerocketControl holds the image source for control container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketControl BottlerocketControl `json:"bottlerocketControl,omitempty"`
+
+	// Proxy holds the https and no proxy information
+	// This is only for bottlerocket
+	// +optional
+	Proxy ProxyConfiguration `json:"proxy,omitempty"`
+
+	// RegistryMirror holds the image registry mirror information
+	// This is only for bottlerocket
+	// +optional
+	RegistryMirror RegistryMirrorConfiguration `json:"registryMirror,omitempty"`
+
 	// Etcd holds configuration for etcd.
 	// +optional
 	Etcd Etcd `json:"etcd,omitempty"`
@@ -133,13 +162,130 @@ type ClusterConfiguration struct {
 	// The cluster name
 	// +optional
 	ClusterName string `json:"clusterName,omitempty"`
+
+	// BottlerocketHostContainers contains the information of any additional images
+	// that we will deploy as host containers in the CPIs
+	// +optional
+	BottlerocketHostContainers []BottlerocketHostContainer `json:"bottlerocketCustomHostContainers,omitempty"`
+
+	// BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+	// This is only for bottlerocket.
+	// +optional
+	BottlerocketCustomBootstrapContainers []BottlerocketBootstrapContainer `json:"bottlerocketCustomBootstrapContainers,omitempty"`
+
+	// Bottlerocket holds configuration for certain bottlerocket settings.
+	// This is only for bottlerocket.
+	// +optional
+	Bottlerocket *BottlerocketSettings `json:"bottlerocket,omitempty"`
+
+	// CertBundles holds additional trusted cert bundles.
+	// +optional
+	CertBundles []CertBundle `json:"certBundles,omitempty"`
+}
+
+// BottlerocketSettings define bottlerocket settings that can be configured on bottlerocket nodes.
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketSettings struct {
+	// Kubernetes holds the kubernetes settings for bottlerocket nodes.
+	Kubernetes *BottlerocketKubernetesSettings `json:"kubernetes,omitempty"`
+
+	// KernelSettings contains additional kernel settings for Bottlerocket.
+	// +optional
+	Kernel *BottlerocketKernelSettings `json:"kernel,omitempty"`
+
+	// Boot holds the boot-related settings for bottlerocket nodes
+	Boot *BottlerocketBootSettings `json:"boot,omitempty"`
+}
+
+// BottlerocketKubernetesSettings holds the settings for kubernetes on bottlerocket nodes.
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketKubernetesSettings struct {
+	// MaxPods defines the maximum number of pods that can run on a node.
+	MaxPods int `json:"maxPods,omitempty"`
+
+	// AllowedUnsafeSysctls defines the list of unsafe sysctls that can be set on a node.
+	AllowedUnsafeSysctls []string `json:"allowedUnsafeSysctls,omitempty"`
+
+	// ClusterDNSIPs defines IP addresses of the DNS servers.
+	ClusterDNSIPs []string `json:"clusterDNSIPs,omitempty"`
+}
+
+// BottlerocketKernelSettings holds the kernel settings for bottlerocket nodes
+type BottlerocketKernelSettings struct {
+	// SysctlSettings defines the kernel sysctl settings to set for bottlerocket nodes.
+	SysctlSettings map[string]string `json:"sysctlSettings,omitempty"`
+}
+
+// BottlerocketBootSettings holds the boot-related settings for bottlerocket nodes.
+type BottlerocketBootSettings struct {
+	BootKernelParameters map[string][]string `json:"bootKernelParameters,omitempty"`
+}
+
+// Pause defines the pause image repo and tag that should be run on the bootstrapped nodes.
+// This setting is ONLY for bottlerocket nodes, as this needs to be set pre-boot time along with user-data
+type Pause struct {
+	// ImageMeta allows to customize the image used for the Pause component
+	ImageMeta `json:",inline"`
+}
+
+// BottlerocketBootstrap holds the settings of kubeadm bootstrap container for bottlerocket nodes
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketBootstrap struct {
+	// ImageMeta allows to customize the image used for the BottlerocketBootstrap component
+	ImageMeta `json:",inline"`
+}
+
+// BottlerocketAdmin holds the settings of admin container for bottlerocket nodes
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketAdmin struct {
+	// ImageMeta allows to customize the image used for the BottlerocketAdmin component
+	ImageMeta `json:",inline"`
+}
+
+// BottlerocketControl holds the settings of control container for bottlerocket nodes
+// This setting is ONLY for bottlerocket nodes.
+type BottlerocketControl struct {
+	// ImageMeta allows to customize the image used for the BottlerocketControl component
+	ImageMeta `json:",inline"`
+}
+
+// ProxyConfiguration holds the settings for proxying bottlerocket services
+type ProxyConfiguration struct {
+	// HTTPS proxy
+	HTTPSProxy string `json:"httpsProxy,omitempty"`
+
+	// No proxy, list of ips that should not use proxy
+	NoProxy []string `json:"noProxy,omitempty"`
+}
+
+// RegistryMirrorConfiguration holds the settings for image registry mirror
+type RegistryMirrorConfiguration struct {
+	// Endpoint defines the registry mirror endpoint to use for pulling images
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// CACert defines the CA cert for the registry mirror
+	CACert string `json:"caCert,omitempty"`
+
+	// Mirrors defines a list of image registry mirrors.
+	// +k8s:conversion-gen=false
+	// +optional
+	Mirrors []Mirror `json:"mirrors,omitempty"`
+}
+
+// Mirror holds the settings for mirroring a registry.
+type Mirror struct {
+	// Registry defines the registry we are mirroring to the endpoint.
+	Registry string `json:"registry,omitempty"`
+
+	// Endpoints defines the registry mirror endpoints to use for pulling images.
+	// Currently we support only one private registry. Hence endpoints would have only one entry.
+	Endpoints []string `json:"endpoints,omitempty"`
 }
 
 // ControlPlaneComponent holds settings common to control plane component of the cluster.
 type ControlPlaneComponent struct {
 	// ExtraArgs is an extra set of flags to pass to the control plane component.
-	// TODO: This is temporary and ideally we would like to switch all components to
-	// use ComponentConfig + ConfigMaps.
+	// TODO: This is temporary and ideally we would like to switch all components to use ComponentConfig + ConfigMaps.
 	// +optional
 	ExtraArgs map[string]string `json:"extraArgs,omitempty"`
 
@@ -225,6 +371,13 @@ type NodeRegistrationOptions struct {
 	// IgnorePreflightErrors provides a slice of pre-flight errors to be ignored when the current node is registered.
 	// +optional
 	IgnorePreflightErrors []string `json:"ignorePreflightErrors,omitempty"`
+
+	// ImagePullPolicy specifies the policy for image pulling
+	// during kubeadm "init" and "join" operations. The value of
+	// this field must be one of "Always", "IfNotPresent" or
+	// "Never". Defaults to "IfNotPresent".
+	// +optional
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
 }
 
 // Networking contains elements describing cluster's networking configuration.
@@ -328,6 +481,36 @@ type ExternalEtcd struct {
 type JoinConfiguration struct {
 	metav1.TypeMeta `json:",inline"`
 
+	// Pause holds the image source for pause container
+	// This is only for bottlerocket
+	// +optional
+	Pause Pause `json:"pause,omitempty"`
+
+	// BottlerocketBootstrap holds the image source for kubeadm bootstrap container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketBootstrap BottlerocketBootstrap `json:"bottlerocketBootstrap,omitempty"`
+
+	// BottlerocketAdmin holds the image source for admin container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketAdmin BottlerocketAdmin `json:"bottlerocketAdmin,omitempty"`
+
+	// BottlerocketControl holds the image source for control container
+	// This is only for bottlerocket
+	// +optional
+	BottlerocketControl BottlerocketControl `json:"bottlerocketControl,omitempty"`
+
+	// Proxy holds the https and no proxy information
+	// This is only for bottlerocket
+	// +optional
+	Proxy ProxyConfiguration `json:"proxy,omitempty"`
+
+	// RegistryMirror holds the image registry mirror information
+	// This is only for bottlerocket
+	// +optional
+	RegistryMirror RegistryMirrorConfiguration `json:"registryMirror,omitempty"`
+
 	// NodeRegistration holds fields that relate to registering the new control-plane node to the cluster
 	// +optional
 	NodeRegistration NodeRegistrationOptions `json:"nodeRegistration,omitempty"`
@@ -346,6 +529,25 @@ type JoinConfiguration struct {
 	// +optional
 	ControlPlane *JoinControlPlane `json:"controlPlane,omitempty"`
 
+	// BottlerocketCustomHostContainers contains the information of any additional images
+	// that we will deploy as host containers in the CPIs
+	// +optional
+	BottlerocketCustomHostContainers []BottlerocketHostContainer `json:"bottlerocketCustomHostContainers,omitempty"`
+
+	// BottlerocketCustomBootstrapContainers adds additional bootstrap containers for Bottlerocket.
+	// This is only for bottlerocket.
+	// +optional
+	BottlerocketCustomBootstrapContainers []BottlerocketBootstrapContainer `json:"bottlerocketCustomBootstrapContainers,omitempty"`
+
+	// Bottlerocket holds configuration for certain bottlerocket settings.
+	// This is only for bottlerocket.
+	// +optional
+	Bottlerocket *BottlerocketSettings `json:"bottlerocket,omitempty"`
+
+	// CertBundles holds additional trusted cert bundles.
+	// +optional
+	CertBundles []CertBundle `json:"certBundles,omitempty"`
+
 	// SkipPhases is a list of phases to skip during command execution.
 	// The list of phases can be obtained with the "kubeadm join --help" command.
 	// The flag "--skip-phases" takes precedence over this field.
@@ -356,6 +558,53 @@ type JoinConfiguration struct {
 	// "kubeadm init". The minimum kubernetes version needed to support Patches is v1.22
 	// +optional
 	Patches *Patches `json:"patches,omitempty"`
+}
+
+// BottlerocketHostContainer describes a host image for Bottlerocket
+type BottlerocketHostContainer struct {
+	// Name is the host container name that will be given to the container in BR's `apiserver`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// Superpowered indicates if the container will be superpowered
+	// +kubebuilder:validation:Required
+	Superpowered bool `json:"superpowered"`
+	// ImageMeta is the actual location of the container image
+	ImageMeta `json:"source"`
+	// UserData is the userdata that will be attached to the image.
+	// +optional
+	UserData string `json:"userData,omitempty"`
+}
+
+// BottlerocketBootstrapContainer holds the bootstrap container setting for Bottlerocket
+type BottlerocketBootstrapContainer struct {
+	// Name is the bootstrap container name that will be given to the container in BR's `apiserver`.
+	Name string `json:"name"`
+
+	// ImageMeta is the actual image used for Bottlerocket bootstrap.
+	ImageMeta `json:",inline"`
+
+	// Essential decides whether or not the container should fail the boot process.
+	// Bootstrap containers configured with essential = true will stop the boot process if they exit code is a non-zero value.
+	// Default is false.
+	// +optional
+	Essential bool `json:"essential"`
+
+	// Mode represents the bootstrap container mode.
+	// +kubebuilder:validation:Enum=always;off;once
+	Mode string `json:"mode"`
+
+	// UserData is the base64-encoded userdata.
+	// +optional
+	UserData string `json:"userData,omitempty"`
+}
+
+// CertBundle holds the cert data.
+type CertBundle struct {
+	// Name is the name of the cert bundle.
+	Name string `json:"name"`
+
+	// Data is the actual cert.
+	Data string `json:"data"`
 }
 
 // JoinControlPlane contains elements describing an additional control plane instance to be deployed on the joining node.

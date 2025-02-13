@@ -25,11 +25,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	. "sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/internal/controllers/topology/cluster/scope"
-	"sigs.k8s.io/cluster-api/internal/test/builder"
-	. "sigs.k8s.io/cluster-api/internal/test/matchers"
+	"sigs.k8s.io/cluster-api/exp/topology/scope"
+	"sigs.k8s.io/cluster-api/util/test/builder"
 )
 
 func TestGetBlueprint(t *testing.T) {
@@ -37,6 +37,8 @@ func TestGetBlueprint(t *testing.T) {
 		builder.GenericInfrastructureClusterTemplateCRD,
 		builder.GenericInfrastructureMachineTemplateCRD,
 		builder.GenericInfrastructureMachineCRD,
+		builder.GenericInfrastructureMachinePoolTemplateCRD,
+		builder.GenericInfrastructureMachinePoolCRD,
 		builder.GenericControlPlaneTemplateCRD,
 		builder.GenericBootstrapConfigTemplateCRD,
 	}
@@ -56,11 +58,14 @@ func TestGetBlueprint(t *testing.T) {
 
 	workerInfrastructureMachineTemplate := builder.InfrastructureMachineTemplate(metav1.NamespaceDefault, "workerinframachinetemplate1").
 		Build()
+	workerInfrastructureMachinePoolTemplate := builder.InfrastructureMachinePoolTemplate(metav1.NamespaceDefault, "workerinframachinepooltemplate1").
+		Build()
 	workerBootstrapTemplate := builder.BootstrapTemplate(metav1.NamespaceDefault, "workerbootstraptemplate1").
 		Build()
 	machineHealthCheck := &clusterv1.MachineHealthCheckClass{
 		NodeStartupTimeout: &metav1.Duration{
-			Duration: time.Duration(1)},
+			Duration: time.Duration(1),
+		},
 	}
 
 	machineDeployment := builder.MachineDeploymentClass("workerclass1").
@@ -73,6 +78,14 @@ func TestGetBlueprint(t *testing.T) {
 
 	mds := []clusterv1.MachineDeploymentClass{*machineDeployment}
 
+	machinePools := builder.MachinePoolClass("workerclass2").
+		WithLabels(map[string]string{"foo": "bar"}).
+		WithAnnotations(map[string]string{"a": "b"}).
+		WithInfrastructureTemplate(workerInfrastructureMachinePoolTemplate).
+		WithBootstrapTemplate(workerBootstrapTemplate).
+		Build()
+	mps := []clusterv1.MachinePoolClass{*machinePools}
+
 	// Define test cases.
 	tests := []struct {
 		name         string
@@ -81,10 +94,6 @@ func TestGetBlueprint(t *testing.T) {
 		want         *scope.ClusterBlueprint
 		wantErr      bool
 	}{
-		{
-			name:    "Fails if ClusterClass does not exist",
-			wantErr: true,
-		},
 		{
 			name: "Fails if ClusterClass does not have reference to the InfrastructureClusterTemplate",
 			clusterClass: builder.ClusterClass(metav1.NamespaceDefault, "clusterclass1").
@@ -145,6 +154,7 @@ func TestGetBlueprint(t *testing.T) {
 					Template: controlPlaneTemplate,
 				},
 				MachineDeployments: map[string]*scope.MachineDeploymentBlueprint{},
+				MachinePools:       map[string]*scope.MachinePoolBlueprint{},
 			},
 		},
 		{
@@ -171,6 +181,7 @@ func TestGetBlueprint(t *testing.T) {
 					InfrastructureMachineTemplate: controlPlaneInfrastructureMachineTemplate,
 				},
 				MachineDeployments: map[string]*scope.MachineDeploymentBlueprint{},
+				MachinePools:       map[string]*scope.MachinePoolBlueprint{},
 			},
 		},
 		{
@@ -221,10 +232,11 @@ func TestGetBlueprint(t *testing.T) {
 						MachineHealthCheck:            machineHealthCheck,
 					},
 				},
+				MachinePools: map[string]*scope.MachinePoolBlueprint{},
 			},
 		},
 		{
-			name: "Fails if ClusterClass has a MachineDeploymentClass referencing a BootstrapTemplate that does not exist",
+			name: "Fails if ClusterClass has a MachineDeploymentClass referencing a BootstrapConfigTemplate that does not exist",
 			clusterClass: builder.ClusterClass(metav1.NamespaceDefault, "class1").
 				WithInfrastructureClusterTemplate(infraClusterTemplate).
 				WithControlPlaneTemplate(controlPlaneTemplate).
@@ -280,7 +292,74 @@ func TestGetBlueprint(t *testing.T) {
 					MachineHealthCheck:            machineHealthCheck,
 				},
 				MachineDeployments: map[string]*scope.MachineDeploymentBlueprint{},
+				MachinePools:       map[string]*scope.MachinePoolBlueprint{},
 			},
+		},
+		{
+			name: "Should read a ClusterClass with a MachinePoolClass",
+			clusterClass: builder.ClusterClass(metav1.NamespaceDefault, "class1").
+				WithInfrastructureClusterTemplate(infraClusterTemplate).
+				WithControlPlaneTemplate(controlPlaneTemplate).
+				WithWorkerMachinePoolClasses(mps...).
+				Build(),
+			objects: []client.Object{
+				infraClusterTemplate,
+				controlPlaneTemplate,
+				workerInfrastructureMachinePoolTemplate,
+				workerBootstrapTemplate,
+			},
+			want: &scope.ClusterBlueprint{
+				ClusterClass: builder.ClusterClass(metav1.NamespaceDefault, "class1").
+					WithInfrastructureClusterTemplate(infraClusterTemplate).
+					WithControlPlaneTemplate(controlPlaneTemplate).
+					WithWorkerMachinePoolClasses(mps...).
+					Build(),
+				InfrastructureClusterTemplate: infraClusterTemplate,
+				ControlPlane: &scope.ControlPlaneBlueprint{
+					Template: controlPlaneTemplate,
+				},
+				MachineDeployments: map[string]*scope.MachineDeploymentBlueprint{},
+				MachinePools: map[string]*scope.MachinePoolBlueprint{
+					"workerclass2": {
+						Metadata: clusterv1.ObjectMeta{
+							Labels:      map[string]string{"foo": "bar"},
+							Annotations: map[string]string{"a": "b"},
+						},
+						InfrastructureMachinePoolTemplate: workerInfrastructureMachinePoolTemplate,
+						BootstrapTemplate:                 workerBootstrapTemplate,
+					},
+				},
+			},
+		},
+		{
+			name: "Fails if ClusterClass has a MachinePoolClass referencing a BootstrapConfigTemplate that does not exist",
+			clusterClass: builder.ClusterClass(metav1.NamespaceDefault, "class1").
+				WithInfrastructureClusterTemplate(infraClusterTemplate).
+				WithControlPlaneTemplate(controlPlaneTemplate).
+				WithWorkerMachinePoolClasses(mps...).
+				Build(),
+			objects: []client.Object{
+				infraClusterTemplate,
+				controlPlaneTemplate,
+				workerInfrastructureMachinePoolTemplate,
+				// workerBootstrapTemplate is missing!
+			},
+			wantErr: true,
+		},
+		{
+			name: "Fails if ClusterClass has a MachinePoolClass referencing a InfrastructureMachinePoolTemplate that does not exist",
+			clusterClass: builder.ClusterClass(metav1.NamespaceDefault, "class1").
+				WithInfrastructureClusterTemplate(infraClusterTemplate).
+				WithControlPlaneTemplate(controlPlaneTemplate).
+				WithWorkerMachinePoolClasses(mps...).
+				Build(),
+			objects: []client.Object{
+				infraClusterTemplate,
+				controlPlaneTemplate,
+				workerBootstrapTemplate,
+				// workerInfrastructureMachinePoolTemplate is missing!
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -314,17 +393,16 @@ func TestGetBlueprint(t *testing.T) {
 
 			// Calls getBlueprint.
 			r := &Reconciler{
-				Client:                    fakeClient,
-				patchHelperFactory:        dryRunPatchHelperFactory(fakeClient),
-				UnstructuredCachingClient: fakeClient,
+				Client:             fakeClient,
+				patchHelperFactory: dryRunPatchHelperFactory(fakeClient),
 			}
-			got, err := r.getBlueprint(ctx, scope.New(cluster).Current.Cluster)
+			got, err := r.getBlueprint(ctx, scope.New(cluster).Current.Cluster, tt.clusterClass)
 
 			// Checks the return error.
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 
 			if tt.want == nil {
@@ -336,8 +414,9 @@ func TestGetBlueprint(t *testing.T) {
 			// is enough to establish inequality.
 			g.Expect(tt.want.ClusterClass).To(EqualObject(got.ClusterClass, IgnoreAutogeneratedMetadata))
 			g.Expect(tt.want.InfrastructureClusterTemplate).To(EqualObject(got.InfrastructureClusterTemplate), cmp.Diff(got.InfrastructureClusterTemplate, tt.want.InfrastructureClusterTemplate))
-			g.Expect(got.ControlPlane).To(Equal(tt.want.ControlPlane), cmp.Diff(got.ControlPlane, tt.want.ControlPlane))
-			g.Expect(tt.want.MachineDeployments).To(Equal(got.MachineDeployments), got.MachineDeployments, tt.want.MachineDeployments)
+			g.Expect(got.ControlPlane).To(BeComparableTo(tt.want.ControlPlane), cmp.Diff(got.ControlPlane, tt.want.ControlPlane))
+			g.Expect(tt.want.MachineDeployments).To(BeComparableTo(got.MachineDeployments), cmp.Diff(got.MachineDeployments, tt.want.MachineDeployments))
+			g.Expect(tt.want.MachinePools).To(BeComparableTo(got.MachinePools), cmp.Diff(got.MachinePools, tt.want.MachinePools))
 		})
 	}
 }

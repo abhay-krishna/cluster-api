@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package v1alpha3
 
 import (
@@ -64,7 +65,7 @@ func TestGetReleaseSeriesForContract(t *testing.T) {
 			g := NewWithT(t)
 
 			m := &Metadata{ReleaseSeries: test.releaseSeries}
-			g.Expect(m.GetReleaseSeriesForContract(test.contract)).To(Equal(test.expectedReleaseSeries))
+			g.Expect(m.GetReleaseSeriesForContract(test.contract)).To(BeComparableTo(test.expectedReleaseSeries))
 		})
 	}
 }

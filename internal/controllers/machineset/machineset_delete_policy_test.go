@@ -68,6 +68,28 @@ func TestMachineToDelete(t *testing.T) {
 			},
 		},
 	}
+	healthCheckSucceededConditionFalseMachine := &clusterv1.Machine{
+		Status: clusterv1.MachineStatus{
+			NodeRef: nodeRef,
+			Conditions: clusterv1.Conditions{
+				{
+					Type:   clusterv1.MachineHealthCheckSucceededCondition,
+					Status: corev1.ConditionFalse,
+				},
+			},
+		},
+	}
+	healthCheckSucceededConditionUnknownMachine := &clusterv1.Machine{
+		Status: clusterv1.MachineStatus{
+			NodeRef: nodeRef,
+			Conditions: clusterv1.Conditions{
+				{
+					Type:   clusterv1.MachineHealthCheckSucceededCondition,
+					Status: corev1.ConditionUnknown,
+				},
+			},
+		},
+	}
 
 	tests := []struct {
 		desc     string
@@ -178,9 +200,9 @@ func TestMachineToDelete(t *testing.T) {
 			desc: "func=randomDeletePolicy, DeleteMachineAnnotation, diff=1",
 			diff: 1,
 			machines: []*clusterv1.Machine{
-				healthyMachine,
+				betterDeleteMachine,
 				deleteMachineWithMachineAnnotation,
-				healthyMachine,
+				betterDeleteMachine,
 			},
 			expect: []*clusterv1.Machine{
 				deleteMachineWithMachineAnnotation,
@@ -219,7 +241,31 @@ func TestMachineToDelete(t *testing.T) {
 				healthyMachine,
 			},
 			expect: []*clusterv1.Machine{
-				nodeHealthyConditionUnknownMachine,
+				healthyMachine,
+			},
+		},
+		{
+			desc: "func=randomDeletePolicy, HealthCheckSucceededConditionFalseMachine, diff=1",
+			diff: 1,
+			machines: []*clusterv1.Machine{
+				healthyMachine,
+				healthCheckSucceededConditionFalseMachine,
+				healthyMachine,
+			},
+			expect: []*clusterv1.Machine{
+				healthCheckSucceededConditionFalseMachine,
+			},
+		},
+		{
+			desc: "func=randomDeletePolicy, HealthCheckSucceededConditionUnknownMachine, diff=1",
+			diff: 1,
+			machines: []*clusterv1.Machine{
+				healthyMachine,
+				healthCheckSucceededConditionUnknownMachine,
+				healthyMachine,
+			},
+			expect: []*clusterv1.Machine{
+				healthyMachine,
 			},
 		},
 	}
@@ -229,7 +275,7 @@ func TestMachineToDelete(t *testing.T) {
 			g := NewWithT(t)
 
 			result := getMachinesToDeletePrioritized(test.machines, test.diff, randomDeletePolicy)
-			g.Expect(result).To(Equal(test.expect))
+			g.Expect(result).To(BeComparableTo(test.expect))
 		})
 	}
 }
@@ -360,9 +406,10 @@ func TestMachineNewestDelete(t *testing.T) {
 			desc: "func=newestDeletePriority, diff=1 (nodeHealthyConditionUnknownMachine)",
 			diff: 1,
 			machines: []*clusterv1.Machine{
+				// nodeHealthyConditionUnknownMachine is not considered unhealthy with unknown condition.
 				secondNewest, oldest, secondOldest, newest, nodeHealthyConditionUnknownMachine,
 			},
-			expect: []*clusterv1.Machine{nodeHealthyConditionUnknownMachine},
+			expect: []*clusterv1.Machine{newest},
 		},
 	}
 
@@ -371,7 +418,7 @@ func TestMachineNewestDelete(t *testing.T) {
 			g := NewWithT(t)
 
 			result := getMachinesToDeletePrioritized(test.machines, test.diff, newestDeletePriority)
-			g.Expect(result).To(Equal(test.expect))
+			g.Expect(result).To(BeComparableTo(test.expect))
 		})
 	}
 }
@@ -405,6 +452,18 @@ func TestMachineOldestDelete(t *testing.T) {
 	}
 	unhealthyMachine := &clusterv1.Machine{
 		ObjectMeta: metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(currentTime.Time.AddDate(0, 0, -10))},
+		Status:     clusterv1.MachineStatus{FailureReason: &statusError, NodeRef: nodeRef},
+	}
+	mustDeleteMachine := &clusterv1.Machine{
+		ObjectMeta: metav1.ObjectMeta{Name: "b", DeletionTimestamp: &currentTime},
+		Status:     clusterv1.MachineStatus{NodeRef: nodeRef},
+	}
+	unhealthyMachineA := &clusterv1.Machine{
+		ObjectMeta: metav1.ObjectMeta{Name: "a", CreationTimestamp: metav1.NewTime(currentTime.Time.AddDate(0, 0, -10))},
+		Status:     clusterv1.MachineStatus{FailureReason: &statusError, NodeRef: nodeRef},
+	}
+	unhealthyMachineZ := &clusterv1.Machine{
+		ObjectMeta: metav1.ObjectMeta{Name: "z", CreationTimestamp: metav1.NewTime(currentTime.Time.AddDate(0, 0, -10))},
 		Status:     clusterv1.MachineStatus{FailureReason: &statusError, NodeRef: nodeRef},
 	}
 	deleteMachineWithoutNodeRef := &clusterv1.Machine{
@@ -511,7 +570,25 @@ func TestMachineOldestDelete(t *testing.T) {
 			machines: []*clusterv1.Machine{
 				empty, secondNewest, oldest, secondOldest, newest, nodeHealthyConditionUnknownMachine,
 			},
-			expect: []*clusterv1.Machine{nodeHealthyConditionUnknownMachine},
+			// nodeHealthyConditionUnknownMachine is not considered unhealthy with unknown condition.
+			expect: []*clusterv1.Machine{oldest},
+		},
+		// these two cases ensures the mustDeleteMachine is always picked regardless of the machine names.
+		{
+			desc: "func=oldestDeletePriority, diff=1 (unhealthyMachineA)",
+			diff: 1,
+			machines: []*clusterv1.Machine{
+				empty, secondNewest, oldest, secondOldest, newest, mustDeleteMachine, unhealthyMachineA,
+			},
+			expect: []*clusterv1.Machine{mustDeleteMachine},
+		},
+		{
+			desc: "func=oldestDeletePriority, diff=1 (unhealthyMachineZ)",
+			diff: 1,
+			machines: []*clusterv1.Machine{
+				empty, secondNewest, oldest, secondOldest, newest, mustDeleteMachine, unhealthyMachineZ,
+			},
+			expect: []*clusterv1.Machine{mustDeleteMachine},
 		},
 	}
 
@@ -520,7 +597,7 @@ func TestMachineOldestDelete(t *testing.T) {
 			g := NewWithT(t)
 
 			result := getMachinesToDeletePrioritized(test.machines, test.diff, oldestDeletePriority)
-			g.Expect(result).To(Equal(test.expect))
+			g.Expect(result).To(BeComparableTo(test.expect))
 		})
 	}
 }
@@ -528,7 +605,7 @@ func TestMachineOldestDelete(t *testing.T) {
 func TestMachineDeleteMultipleSamePriority(t *testing.T) {
 	machines := make([]*clusterv1.Machine, 0, 10)
 	// All of these machines will have the same delete priority because they all have the "must delete" annotation.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		machines = append(machines, &clusterv1.Machine{
 			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("machine-%d", i), Annotations: map[string]string{clusterv1.DeleteMachineAnnotation: "true"}},
 		})
@@ -612,7 +689,7 @@ func TestMachineDeleteMultipleSamePriority(t *testing.T) {
 			}
 
 			result := getMachinesToDeletePrioritized(shuffledMachines, test.diff, test.deletePriority)
-			g.Expect(result).To(Equal(machines[:test.diff]))
+			g.Expect(result).To(BeComparableTo(machines[:test.diff]))
 		})
 	}
 }
@@ -674,7 +751,7 @@ func TestIsMachineHealthy(t *testing.T) {
 					},
 				},
 			},
-			expect: false,
+			expect: true,
 		},
 		{
 			desc: "when all requirements are met for node to be healthy",

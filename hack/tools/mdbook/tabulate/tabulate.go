@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// main is the main package for mdbook-tabulate.
 package main
 
 import (
@@ -37,7 +38,7 @@ func (Tabulate) SupportsOutput(_ string) bool { return true }
 
 // Process modifies the book in the input, which gets returned as the result of the plugin.
 func (l Tabulate) Process(input *plugin.Input) error {
-	if err := plugin.EachCommand(&input.Book, "tabs", func(chapter *plugin.BookChapter, args string) (string, error) {
+	if err := plugin.EachCommand(&input.Book, "tabs", func(_ *plugin.BookChapter, args string) (string, error) {
 		var bld strings.Builder
 		tags := reflect.StructTag(strings.TrimSpace(args))
 		groupName := tags.Get("name")
@@ -62,25 +63,21 @@ func (l Tabulate) Process(input *plugin.Input) error {
 		return err
 	}
 
-	if err := plugin.EachCommand(&input.Book, "tab", func(chapter *plugin.BookChapter, name string) (string, error) {
+	if err := plugin.EachCommand(&input.Book, "tab", func(_ *plugin.BookChapter, name string) (string, error) {
 		return fmt.Sprintf(`<section id="tab-%s" class="tab-panel">`, name), nil
 	}); err != nil {
 		return err
 	}
 
-	if err := plugin.EachCommand(&input.Book, "/tab", func(chapter *plugin.BookChapter, args string) (string, error) {
+	if err := plugin.EachCommand(&input.Book, "/tab", func(*plugin.BookChapter, string) (string, error) {
 		return "</section>", nil
 	}); err != nil {
 		return err
 	}
 
-	if err := plugin.EachCommand(&input.Book, "/tabs", func(chapter *plugin.BookChapter, args string) (string, error) {
+	return plugin.EachCommand(&input.Book, "/tabs", func(*plugin.BookChapter, string) (string, error) {
 		return "</div></div>", nil
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	})
 }
 
 func main() {

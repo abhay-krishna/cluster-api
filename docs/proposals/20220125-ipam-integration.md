@@ -22,39 +22,43 @@ status: provisional
 
 ## Table of Contents
 
-* [IP Address Management Integration](#ip-address-management-integration)
-   * [Table of Contents](#table-of-contents)
-   * [Glossary](#glossary)
-      * [IPAM Provider](#ipam-provider)
-      * [IPAddressClaim](#ipaddressclaim)
-      * [IPAddress](#ipaddress)
-      * [IP Pool](#ip-pool)
-   * [Summary](#summary)
-   * [Motivation](#motivation)
-      * [Goals](#goals)
-      * [Non-Goals/Future Work](#non-goalsfuture-work)
-   * [Proposal](#proposal)
-      * [IPAM API Contract](#ipam-api-contract)
-      * [Pools &amp; IPAM Providers](#pools--ipam-providers)
-      * [Consumption](#consumption)
-         * [Examples](#examples)
-      * [User Stories](#user-stories)
-         * [Story 1](#story-1)
-         * [Story 2](#story-2)
-         * [Story 3](#story-3)
-         * [Story 4](#story-4)
-      * [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
-         * [New API Types](#new-api-types)
-            * [IPAddressClaim](#ipaddressclaim-1)
-            * [IPAddress](#ipaddress-1)
-            * [New Reference Type](#new-reference-type)
-         * [Implementing an IPAM Provider](#implementing-an-ipam-provider)
-         * [Consuming as an Infrastructure Provider](#consuming-as-an-infrastructure-provider)
-         * [Additional Notes](#additional-notes)
-      * [Security Model](#security-model)
-      * [Risks and Mitigations](#risks-and-mitigations)
-   * [Alternatives](#alternatives)
-   * [Implementation History](#implementation-history)
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Glossary](#glossary)
+  - [IPAM Provider](#ipam-provider)
+  - [IPAddressClaim](#ipaddressclaim)
+  - [IPAddress](#ipaddress)
+  - [IP Pool](#ip-pool)
+- [Summary](#summary)
+- [Motivation](#motivation)
+  - [Goals](#goals)
+  - [Non-Goals/Future Work](#non-goalsfuture-work)
+- [Proposal](#proposal)
+  - [User Stories](#user-stories)
+    - [Story 1](#story-1)
+    - [Story 2](#story-2)
+    - [Story 3](#story-3)
+    - [Story 4](#story-4)
+  - [IPAM API Contract](#ipam-api-contract)
+  - [Pools & IPAM Providers](#pools--ipam-providers)
+    - [Examples](#examples)
+  - [Consumption](#consumption)
+    - [Example](#example)
+  - [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
+    - [New API Types](#new-api-types)
+      - [IPAddressClaim](#ipaddressclaim-1)
+      - [IPAddress](#ipaddress-1)
+      - [New Reference Type](#new-reference-type)
+    - [Implementing an IPAM Provider](#implementing-an-ipam-provider)
+    - [Consuming as an Infrastructure Provider](#consuming-as-an-infrastructure-provider)
+    - [Additional Notes](#additional-notes)
+  - [Security Model](#security-model)
+  - [Risks and Mitigations](#risks-and-mitigations)
+- [Alternatives](#alternatives)
+- [Implementation History](#implementation-history)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Glossary
 
@@ -148,7 +152,8 @@ Both **IPAddressClaims** and **IPAddresses** should be part of Cluster API, whil
 
 An **IPAddressClaim** is used by infrastructure providers to request an IP Address. The claim contains a reference to an IP Pool. Because the pool is provider specific, the IPAM controllers can decide whether to handle a claim by inspecting the group and kind of the pool reference.
 
-If a IPAM controller detects a Claim that references a Pool it controls, it allocates an IP address from that pool and creates an **IPAddress** to fulfil the claim. It also updates the status of the `IPAddressClaim` with a reference to the created Address.
+If a IPAM controller detects a Claim that references a Pool it controls, it allocates an IP address from that pool and creates an **IPAddress** to fulfil the claim. It also updates the status of the `IPAddressClaim` with a reference to the created Address.  
+When allocation fails, the `Ready` condition of the claim should be set to false. Where applicable, the reasons specified in the IPAM api package should be used.
 
 
 ### Pools & IPAM Providers

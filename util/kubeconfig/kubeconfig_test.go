@@ -68,7 +68,7 @@ users:
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test1-kubeconfig",
 			Namespace: "test",
-			Labels:    map[string]string{clusterv1.ClusterLabelName: "test1"},
+			Labels:    map[string]string{clusterv1.ClusterNameLabel: "test1"},
 		},
 		Data: map[string][]byte{
 			secret.KubeconfigDataName: []byte(validKubeConfig),
@@ -89,7 +89,7 @@ func TestGetKubeConfigSecret(t *testing.T) {
 	client := fake.NewClientBuilder().WithObjects(validSec).Build()
 
 	found, err := FromSecret(ctx, client, clusterKey)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(found).To(Equal(validSecret.Data[secret.KubeconfigDataName]))
 }
 
@@ -156,10 +156,10 @@ func TestNew(t *testing.T) {
 
 	for _, tc := range testCases {
 		caKey, err := certs.NewPrivateKey()
-		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(err).ToNot(HaveOccurred())
 
 		caCert, err := getTestCACert(caKey)
-		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(err).ToNot(HaveOccurred())
 
 		actualConfig, actualError := New(tc.cluster, tc.endpoint, caCert, caKey)
 		if tc.expectError {
@@ -173,7 +173,7 @@ func TestNew(t *testing.T) {
 		g.Expect(actualConfig.Clusters[tc.cluster]).NotTo(BeNil())
 		g.Expect(actualConfig.Contexts[tc.expectedConfig.CurrentContext]).NotTo(BeNil())
 		g.Expect(actualConfig.CurrentContext).To(Equal(tc.expectedConfig.CurrentContext))
-		g.Expect(actualConfig.Contexts).To(Equal(tc.expectedConfig.Contexts))
+		g.Expect(actualConfig.Contexts).To(BeComparableTo(tc.expectedConfig.Contexts))
 	}
 }
 
@@ -199,7 +199,7 @@ func TestGenerateSecretWithOwner(t *testing.T) {
 	)
 
 	g.Expect(kubeconfigSecret).NotTo(BeNil())
-	g.Expect(kubeconfigSecret).To(Equal(expectedSecret))
+	g.Expect(kubeconfigSecret).To(BeComparableTo(expectedSecret))
 }
 
 func TestGenerateSecret(t *testing.T) {
@@ -233,10 +233,10 @@ func TestCreateSecretWithOwner(t *testing.T) {
 	g := NewWithT(t)
 
 	caKey, err := certs.NewPrivateKey()
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	caCert, err := getTestCACert(caKey)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	caSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -268,7 +268,7 @@ func TestCreateSecretWithOwner(t *testing.T) {
 		owner,
 	)
 
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	s := &corev1.Secret{}
 	key := client.ObjectKey{Name: "test1-kubeconfig", Namespace: "test"}
@@ -277,9 +277,64 @@ func TestCreateSecretWithOwner(t *testing.T) {
 	g.Expect(s.Type).To(Equal(clusterv1.ClusterSecretType))
 
 	clientConfig, err := clientcmd.NewClientConfigFromBytes(s.Data[secret.KubeconfigDataName])
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	restClient, err := clientConfig.ClientConfig()
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(restClient.CAData).To(Equal(certs.EncodeCertPEM(caCert)))
+	g.Expect(restClient.Host).To(Equal("https://localhost:6443"))
+}
+
+func TestCreateSecretWithOwnerHasEndpointPrefixIsSlush(t *testing.T) {
+	g := NewWithT(t)
+
+	caKey, err := certs.NewPrivateKey()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	caCert, err := getTestCACert(caKey)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	caSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test1-ca",
+			Namespace: "test",
+		},
+		Data: map[string][]byte{
+			secret.TLSKeyDataName: certs.EncodePrivateKeyPEM(caKey),
+			secret.TLSCrtDataName: certs.EncodeCertPEM(caCert),
+		},
+	}
+
+	c := fake.NewClientBuilder().WithObjects(caSecret).Build()
+
+	owner := metav1.OwnerReference{
+		Name:       "test1",
+		Kind:       "Cluster",
+		APIVersion: clusterv1.GroupVersion.String(),
+	}
+
+	err = CreateSecretWithOwner(
+		ctx,
+		c,
+		client.ObjectKey{
+			Name:      "test1",
+			Namespace: "test",
+		},
+		"/localhost:6443",
+		owner,
+	)
+
+	g.Expect(err).ToNot(HaveOccurred())
+
+	s := &corev1.Secret{}
+	key := client.ObjectKey{Name: "test1-kubeconfig", Namespace: "test"}
+	g.Expect(c.Get(ctx, key, s)).To(Succeed())
+	g.Expect(s.OwnerReferences).To(ContainElement(owner))
+	g.Expect(s.Type).To(Equal(clusterv1.ClusterSecretType))
+
+	clientConfig, err := clientcmd.NewClientConfigFromBytes(s.Data[secret.KubeconfigDataName])
+	g.Expect(err).ToNot(HaveOccurred())
+	restClient, err := clientConfig.ClientConfig()
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(restClient.CAData).To(Equal(certs.EncodeCertPEM(caCert)))
 	g.Expect(restClient.Host).To(Equal("https://localhost:6443"))
 }
@@ -288,10 +343,10 @@ func TestCreateSecret(t *testing.T) {
 	g := NewWithT(t)
 
 	caKey, err := certs.NewPrivateKey()
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	caCert, err := getTestCACert(caKey)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	caSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -325,7 +380,7 @@ func TestCreateSecret(t *testing.T) {
 		cluster,
 	)
 
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	s := &corev1.Secret{}
 	key := client.ObjectKey{Name: "test1-kubeconfig", Namespace: "test"}
@@ -340,9 +395,9 @@ func TestCreateSecret(t *testing.T) {
 	g.Expect(s.Type).To(Equal(clusterv1.ClusterSecretType))
 
 	clientConfig, err := clientcmd.NewClientConfigFromBytes(s.Data[secret.KubeconfigDataName])
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	restClient, err := clientConfig.ClientConfig()
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(restClient.CAData).To(Equal(certs.EncodeCertPEM(caCert)))
 	g.Expect(restClient.Host).To(Equal("https://localhost:8443"))
 }
@@ -350,16 +405,16 @@ func TestCreateSecret(t *testing.T) {
 func TestNeedsClientCertRotation(t *testing.T) {
 	g := NewWithT(t)
 	caKey, err := certs.NewPrivateKey()
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	caCert, err := getTestCACert(caKey)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	config, err := New("foo", "https://127:0.0.1:4003", caCert, caKey)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	out, err := clientcmd.Write(*config)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	owner := metav1.OwnerReference{
 		Name:       "test1",
@@ -383,10 +438,10 @@ func TestNeedsClientCertRotation(t *testing.T) {
 func TestRegenerateClientCerts(t *testing.T) {
 	g := NewWithT(t)
 	caKey, err := certs.NewPrivateKey()
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	caCert, err := getTestCACert(caKey)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	caSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -402,18 +457,18 @@ func TestRegenerateClientCerts(t *testing.T) {
 	c := fake.NewClientBuilder().WithObjects(validSecret, caSecret).Build()
 
 	oldConfig, err := clientcmd.Load(validSecret.Data[secret.KubeconfigDataName])
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	oldCert, err := certs.DecodeCertPEM(oldConfig.AuthInfos["test1-admin"].ClientCertificateData)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(RegenerateSecret(ctx, c, validSecret)).To(Succeed())
 
 	newSecret := &corev1.Secret{}
 	g.Expect(c.Get(ctx, util.ObjectKey(validSecret), newSecret)).To(Succeed())
 	newConfig, err := clientcmd.Load(newSecret.Data[secret.KubeconfigDataName])
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	newCert, err := certs.DecodeCertPEM(newConfig.AuthInfos["test1-admin"].ClientCertificateData)
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 
 	g.Expect(newCert.NotAfter).To(BeTemporally(">", oldCert.NotAfter))
 }

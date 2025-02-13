@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// main is the main package for openapi-gen.
 package main
 
 import (
@@ -73,6 +74,6 @@ func main() {
 
 	err = os.WriteFile(*outputFile, openAPIBytes, 0600)
 	if err != nil {
-		klog.Exitf("Failed to write OpenAPI specification to file %q: %v", outputFile, err)
+		klog.Exitf("Failed to write OpenAPI specification to file %q: %v", *outputFile, err)
 	}
 }

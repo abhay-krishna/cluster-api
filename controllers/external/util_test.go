@@ -63,9 +63,9 @@ func TestGetResourceFound(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithObjects(testResource.DeepCopy()).Build()
-	got, err := Get(ctx, fakeClient, testResourceReference, metav1.NamespaceDefault)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(got).To(Equal(testResource))
+	got, err := Get(ctx, fakeClient, testResourceReference)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(got).To(BeComparableTo(testResource))
 }
 
 func TestGetResourceNotFound(t *testing.T) {
@@ -79,7 +79,7 @@ func TestGetResourceNotFound(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().Build()
-	_, err := Get(ctx, fakeClient, testResourceReference, metav1.NamespaceDefault)
+	_, err := Get(ctx, fakeClient, testResourceReference)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(apierrors.IsNotFound(errors.Cause(err))).To(BeTrue())
 }
@@ -97,7 +97,7 @@ func TestCloneTemplateResourceNotFound(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().Build()
-	_, err := CloneTemplate(ctx, &CloneTemplateInput{
+	_, err := CreateFromTemplate(ctx, &CreateFromTemplateInput{
 		Client:      fakeClient,
 		TemplateRef: testResourceReference,
 		Namespace:   metav1.NamespaceDefault,
@@ -158,18 +158,18 @@ func TestCloneTemplateResourceFound(t *testing.T) {
 	expectedKind := "Purple"
 	expectedAPIVersion := templateAPIVersion
 	expectedMetadata, ok, err := unstructured.NestedMap(template.UnstructuredContent(), "spec", "template", "metadata")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
 	g.Expect(expectedMetadata).NotTo(BeEmpty())
 
 	expectedSpec, ok, err := unstructured.NestedMap(template.UnstructuredContent(), "spec", "template", "spec")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
 	g.Expect(expectedSpec).NotTo(BeEmpty())
 
 	fakeClient := fake.NewClientBuilder().WithObjects(template.DeepCopy()).Build()
 
-	ref, err := CloneTemplate(ctx, &CloneTemplateInput{
+	ref, err := CreateFromTemplate(ctx, &CreateFromTemplateInput{
 		Client:      fakeClient,
 		TemplateRef: templateRef.DeepCopy(),
 		Namespace:   metav1.NamespaceDefault,
@@ -177,14 +177,14 @@ func TestCloneTemplateResourceFound(t *testing.T) {
 		OwnerRef:    owner.DeepCopy(),
 		Labels: map[string]string{
 			"precedence":               "input",
-			clusterv1.ClusterLabelName: "should-be-overwritten",
+			clusterv1.ClusterNameLabel: "should-be-overwritten",
 		},
 		Annotations: map[string]string{
 			"precedence": "input",
 			clusterv1.TemplateClonedFromNameAnnotation: "should-be-overwritten",
 		},
 	})
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ref).NotTo(BeNil())
 	g.Expect(ref.Kind).To(Equal(expectedKind))
 	g.Expect(ref.APIVersion).To(Equal(expectedAPIVersion))
@@ -201,12 +201,12 @@ func TestCloneTemplateResourceFound(t *testing.T) {
 	g.Expect(clone.GetOwnerReferences()).To(ContainElement(owner))
 
 	cloneSpec, ok, err := unstructured.NestedMap(clone.UnstructuredContent(), "spec")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
-	g.Expect(cloneSpec).To(Equal(expectedSpec))
+	g.Expect(cloneSpec).To(BeComparableTo(expectedSpec))
 
 	cloneLabels := clone.GetLabels()
-	g.Expect(cloneLabels).To(HaveKeyWithValue(clusterv1.ClusterLabelName, testClusterName))
+	g.Expect(cloneLabels).To(HaveKeyWithValue(clusterv1.ClusterNameLabel, testClusterName))
 	g.Expect(cloneLabels).To(HaveKeyWithValue("test-template", "label"))
 	g.Expect(cloneLabels).To(HaveKeyWithValue("precedence", "input"))
 
@@ -252,27 +252,28 @@ func TestCloneTemplateResourceFoundNoOwner(t *testing.T) {
 
 	expectedKind := "Yellow"
 	expectedAPIVersion := templateAPIVersion
-	expectedLabels := map[string]string{clusterv1.ClusterLabelName: testClusterName}
+	expectedLabels := map[string]string{clusterv1.ClusterNameLabel: testClusterName}
 
 	expectedSpec, ok, err := unstructured.NestedMap(template.UnstructuredContent(), "spec", "template", "spec")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
 	g.Expect(expectedSpec).NotTo(BeEmpty())
 
 	fakeClient := fake.NewClientBuilder().WithObjects(template.DeepCopy()).Build()
 
-	ref, err := CloneTemplate(ctx, &CloneTemplateInput{
+	ref, err := CreateFromTemplate(ctx, &CreateFromTemplateInput{
 		Client:      fakeClient,
 		TemplateRef: templateRef,
 		Namespace:   metav1.NamespaceDefault,
+		Name:        "object-name",
 		ClusterName: testClusterName,
 	})
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ref).NotTo(BeNil())
 	g.Expect(ref.Kind).To(Equal(expectedKind))
 	g.Expect(ref.APIVersion).To(Equal(expectedAPIVersion))
 	g.Expect(ref.Namespace).To(Equal(metav1.NamespaceDefault))
-	g.Expect(ref.Name).To(HavePrefix(templateRef.Name))
+	g.Expect(ref.Name).To(Equal("object-name"))
 
 	clone := &unstructured.Unstructured{}
 	clone.SetKind(expectedKind)
@@ -282,9 +283,9 @@ func TestCloneTemplateResourceFoundNoOwner(t *testing.T) {
 	g.Expect(clone.GetLabels()).To(Equal(expectedLabels))
 	g.Expect(clone.GetOwnerReferences()).To(BeEmpty())
 	cloneSpec, ok, err := unstructured.NestedMap(clone.UnstructuredContent(), "spec")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
-	g.Expect(cloneSpec).To(Equal(expectedSpec))
+	g.Expect(cloneSpec).To(BeComparableTo(expectedSpec))
 }
 
 func TestCloneTemplateMissingSpecTemplate(t *testing.T) {
@@ -315,7 +316,7 @@ func TestCloneTemplateMissingSpecTemplate(t *testing.T) {
 
 	fakeClient := fake.NewClientBuilder().WithObjects(template.DeepCopy()).Build()
 
-	_, err := CloneTemplate(ctx, &CloneTemplateInput{
+	_, err := CreateFromTemplate(ctx, &CreateFromTemplateInput{
 		Client:      fakeClient,
 		TemplateRef: templateRef,
 		Namespace:   metav1.NamespaceDefault,

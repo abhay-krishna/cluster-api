@@ -35,6 +35,7 @@ type (
 
 const (
 	mustDelete    deletePriority = 100.0
+	shouldDelete  deletePriority = 75.0
 	betterDelete  deletePriority = 50.0
 	couldDelete   deletePriority = 20.0
 	mustNotDelete deletePriority = 0.0
@@ -48,10 +49,10 @@ func oldestDeletePriority(machine *clusterv1.Machine) deletePriority {
 		return mustDelete
 	}
 	if _, ok := machine.ObjectMeta.Annotations[clusterv1.DeleteMachineAnnotation]; ok {
-		return mustDelete
+		return shouldDelete
 	}
 	if !isMachineHealthy(machine) {
-		return mustDelete
+		return betterDelete
 	}
 	if machine.ObjectMeta.CreationTimestamp.Time.IsZero() {
 		return mustNotDelete
@@ -60,7 +61,7 @@ func oldestDeletePriority(machine *clusterv1.Machine) deletePriority {
 	if d.Seconds() < 0 {
 		return mustNotDelete
 	}
-	return deletePriority(float64(mustDelete) * (1.0 - math.Exp(-d.Seconds()/secondsPerTenDays)))
+	return deletePriority(float64(betterDelete) * (1.0 - math.Exp(-d.Seconds()/secondsPerTenDays)))
 }
 
 func newestDeletePriority(machine *clusterv1.Machine) deletePriority {
@@ -68,12 +69,12 @@ func newestDeletePriority(machine *clusterv1.Machine) deletePriority {
 		return mustDelete
 	}
 	if _, ok := machine.ObjectMeta.Annotations[clusterv1.DeleteMachineAnnotation]; ok {
-		return mustDelete
+		return shouldDelete
 	}
 	if !isMachineHealthy(machine) {
-		return mustDelete
+		return betterDelete
 	}
-	return mustDelete - oldestDeletePriority(machine)
+	return betterDelete - oldestDeletePriority(machine)
 }
 
 func randomDeletePolicy(machine *clusterv1.Machine) deletePriority {
@@ -81,7 +82,7 @@ func randomDeletePolicy(machine *clusterv1.Machine) deletePriority {
 		return mustDelete
 	}
 	if _, ok := machine.ObjectMeta.Annotations[clusterv1.DeleteMachineAnnotation]; ok {
-		return betterDelete
+		return shouldDelete
 	}
 	if !isMachineHealthy(machine) {
 		return betterDelete
@@ -145,8 +146,13 @@ func isMachineHealthy(machine *clusterv1.Machine) bool {
 	if machine.Status.FailureReason != nil || machine.Status.FailureMessage != nil {
 		return false
 	}
+	// Note: for the sake of prioritization, we are not making any assumption about Health when ConditionUnknown.
 	nodeHealthyCondition := conditions.Get(machine, clusterv1.MachineNodeHealthyCondition)
-	if nodeHealthyCondition != nil && nodeHealthyCondition.Status != corev1.ConditionTrue {
+	if nodeHealthyCondition != nil && nodeHealthyCondition.Status == corev1.ConditionFalse {
+		return false
+	}
+	healthCheckCondition := conditions.Get(machine, clusterv1.MachineHealthCheckSucceededCondition)
+	if healthCheckCondition != nil && healthCheckCondition.Status == corev1.ConditionFalse {
 		return false
 	}
 	return true

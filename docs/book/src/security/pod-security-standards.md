@@ -2,12 +2,12 @@
 
 Pod Security Admission allows applying [Pod Security Standards] during creation of pods at the cluster level.
 
-The flavor `development-topology` for the docker provider used in [Quick Start](../user/quick-start.md) already includes a basic Pod Security Standard configuration.
+The flavor `development-topology` for the Docker provider used in [Quick Start](../user/quick-start.md) already includes a basic Pod Security Standard configuration.
 It is using ClusterClass variables and patches to inject the configuration.
 
 ## Adding a basic Pod Security Standards configuration to a ClusterClass
 
-By adding the following variables and patches Pod Security Standards can be added to every ClusterClass which references a [Kubeadm based control plane](../tasks/kubeadm-control-plane.md).
+By adding the following variables and patches Pod Security Standards can be added to every ClusterClass which references a [Kubeadm based control plane](../tasks/control-plane/kubeadm-control-plane.md).
 
 ### Adding the variables to a ClusterClass
 
@@ -98,7 +98,7 @@ spec:
               plugins:
               - name: PodSecurity
                 configuration:
-                  apiVersion: pod-security.admission.config.k8s.io/v1beta1
+                  apiVersion: pod-security.admission.config.k8s.io/v1{{ if semverCompare "< v1.25" .builtin.controlPlane.version }}beta1{{ end }}
                   kind: PodSecurityConfiguration
                   defaults:
                     enforce: "{{ .podSecurity.enforce }}"
@@ -164,7 +164,7 @@ spec:
                 plugins:
                 - name: PodSecurity
                   configuration:
-                    apiVersion: pod-security.admission.config.k8s.io/v1beta1
+                    apiVersion: pod-security.admission.config.k8s.io/v1{{ if semverCompare "< v1.25" .builtin.controlPlane.version }}beta1{{ end }}
                     kind: PodSecurityConfiguration
                     defaults:
                       enforce: "{{ .podSecurity.enforce }}"

@@ -22,14 +22,14 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/collections"
 )
 
 func TestMachineCollection(t *testing.T) {
-	t.Run("SortedByAge", func(t *testing.T) {
+	t.Run("SortedByCreationTimestamp", func(t *testing.T) {
 		t.Run("should return the same number of machines as are in the collection", func(t *testing.T) {
 			g := NewWithT(t)
 			collection := machines()
@@ -37,6 +37,23 @@ func TestMachineCollection(t *testing.T) {
 			g.Expect(sortedMachines).To(HaveLen(len(collection)))
 			g.Expect(sortedMachines[0].Name).To(Equal("machine-1"))
 			g.Expect(sortedMachines[len(sortedMachines)-1].Name).To(Equal("machine-5"))
+			g.Expect(collection.Oldest().Name).To(Equal("machine-1"))
+		})
+	})
+	t.Run("SortedByDeletionTimestamp", func(t *testing.T) {
+		t.Run("should return the same number of machines as are in the collection", func(t *testing.T) {
+			g := NewWithT(t)
+			collection := machines()
+			// Adding Machines without deletionTimestamp.
+			collection["machine-6"] = machine("machine-6")
+			collection["machine-7"] = machine("machine-7")
+			collection["machine-8"] = machine("machine-8")
+
+			sortedMachines := collection.SortedByDeletionTimestamp()
+			g.Expect(sortedMachines).To(HaveLen(len(collection)))
+			g.Expect(sortedMachines[0].Name).To(Equal("machine-1"))
+			g.Expect(sortedMachines[len(sortedMachines)-1].Name).To(Equal("machine-8"))
+			g.Expect(collection.OldestDeletionTimestamp().Name).To(Equal("machine-1"))
 		})
 	})
 	t.Run("Difference", func(t *testing.T) {
@@ -86,51 +103,51 @@ func TestMachinesLowestVersion(t *testing.T) {
 			machines: func() collections.Machines {
 				machines := collections.New()
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-1"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String("1.20"),
+					Version: ptr.To("1.20"),
 				}})
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-2"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String("1.19.8"),
+					Version: ptr.To("1.19.8"),
 				}})
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-3"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String(""),
+					Version: ptr.To(""),
 				}})
 				return machines
 			}(),
-			expected: pointer.String("1.19.8"),
+			expected: ptr.To("1.19.8"),
 		},
 		{
 			name: "return lowest version from machines with pre release versions",
 			machines: func() collections.Machines {
 				machines := collections.New()
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-1"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String("1.20.1"),
+					Version: ptr.To("1.20.1"),
 				}})
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-2"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String("1.20.1-alpha.1"),
+					Version: ptr.To("1.20.1-alpha.1"),
 				}})
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-3"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String(""),
+					Version: ptr.To(""),
 				}})
 				return machines
 			}(),
-			expected: pointer.String("1.20.1-alpha.1"),
+			expected: ptr.To("1.20.1-alpha.1"),
 		},
 		{
 			name: "return lowest version from machines with build identifier versions",
 			machines: func() collections.Machines {
 				machines := collections.New()
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-1"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String("1.20.1+xyz.2"),
+					Version: ptr.To("1.20.1+xyz.2"),
 				}})
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-2"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String("1.20.1+xyz.1"),
+					Version: ptr.To("1.20.1+xyz.1"),
 				}})
 				machines.Insert(&clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Name: "machine-3"}, Spec: clusterv1.MachineSpec{
-					Version: pointer.String(""),
+					Version: ptr.To(""),
 				}})
 				return machines
 			}(),
-			expected: pointer.String("1.20.1+xyz.1"),
+			expected: ptr.To("1.20.1+xyz.1"),
 		},
 	}
 
@@ -146,9 +163,10 @@ func TestMachinesLowestVersion(t *testing.T) {
 
 type machineOpt func(*clusterv1.Machine)
 
-func withCreationTimestamp(timestamp metav1.Time) machineOpt {
+func withTimestamps(timestamp metav1.Time) machineOpt {
 	return func(m *clusterv1.Machine) {
 		m.CreationTimestamp = timestamp
+		m.DeletionTimestamp = &timestamp
 	}
 }
 
@@ -166,10 +184,10 @@ func machine(name string, opts ...machineOpt) *clusterv1.Machine {
 
 func machines() collections.Machines {
 	return collections.Machines{
-		"machine-4": machine("machine-4", withCreationTimestamp(metav1.Time{Time: time.Date(2018, 04, 02, 03, 04, 05, 06, time.UTC)})),
-		"machine-5": machine("machine-5", withCreationTimestamp(metav1.Time{Time: time.Date(2018, 05, 02, 03, 04, 05, 06, time.UTC)})),
-		"machine-2": machine("machine-2", withCreationTimestamp(metav1.Time{Time: time.Date(2018, 02, 02, 03, 04, 05, 06, time.UTC)})),
-		"machine-1": machine("machine-1", withCreationTimestamp(metav1.Time{Time: time.Date(2018, 01, 02, 03, 04, 05, 06, time.UTC)})),
-		"machine-3": machine("machine-3", withCreationTimestamp(metav1.Time{Time: time.Date(2018, 03, 02, 03, 04, 05, 06, time.UTC)})),
+		"machine-4": machine("machine-4", withTimestamps(metav1.Time{Time: time.Date(2018, 04, 02, 03, 04, 05, 06, time.UTC)})),
+		"machine-5": machine("machine-5", withTimestamps(metav1.Time{Time: time.Date(2018, 05, 02, 03, 04, 05, 06, time.UTC)})),
+		"machine-2": machine("machine-2", withTimestamps(metav1.Time{Time: time.Date(2018, 02, 02, 03, 04, 05, 06, time.UTC)})),
+		"machine-1": machine("machine-1", withTimestamps(metav1.Time{Time: time.Date(2018, 01, 02, 03, 04, 05, 06, time.UTC)})),
+		"machine-3": machine("machine-3", withTimestamps(metav1.Time{Time: time.Date(2018, 03, 02, 03, 04, 05, 06, time.UTC)})),
 	}
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
 	bootstraputil "k8s.io/cluster-bootstrap/token/util"
@@ -81,26 +82,21 @@ func getToken(ctx context.Context, c client.Client, token string) (*corev1.Secre
 	}
 
 	if secret.Data == nil {
-		return nil, errors.Errorf("Invalid bootstrap secret %q, remove the token from the kubadm config to re-create", secretName)
+		return nil, errors.Errorf("Invalid bootstrap secret %q, remove the token from the kubeadm config to re-create", secretName)
 	}
 	return secret, nil
-}
-
-// refreshToken extends the TTL for an existing token.
-func refreshToken(ctx context.Context, c client.Client, token string, ttl time.Duration) error {
-	secret, err := getToken(ctx, c, token)
-	if err != nil {
-		return err
-	}
-	secret.Data[bootstrapapi.BootstrapTokenExpirationKey] = []byte(time.Now().UTC().Add(ttl).Format(time.RFC3339))
-
-	return c.Update(ctx, secret)
 }
 
 // shouldRotate returns true if an existing token is past half of its TTL and should to be rotated.
 func shouldRotate(ctx context.Context, c client.Client, token string, ttl time.Duration) (bool, error) {
 	secret, err := getToken(ctx, c, token)
 	if err != nil {
+		// If the secret is deleted before due to unknown reasons, machine pools cannot be scaled up.
+		// Since that, secret should be rotated if missing.
+		// Normally, it is not expected to reach this line.
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
 		return false, err
 	}
 

@@ -42,9 +42,9 @@ import (
 	"strings"
 	"text/template"
 
-	clct "github.com/flatcar-linux/container-linux-config-transpiler/config"
-	ignition "github.com/flatcar-linux/ignition/config/v2_3"
-	ignitionTypes "github.com/flatcar-linux/ignition/config/v2_3/types"
+	clct "github.com/flatcar/container-linux-config-transpiler/config"
+	ignition "github.com/flatcar/ignition/config/v2_3"
+	ignitionTypes "github.com/flatcar/ignition/config/v2_3/types"
 	"github.com/pkg/errors"
 
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
@@ -96,6 +96,7 @@ systemd:
         Description=kubeadm
         # Run only once. After successful run, this file is moved to /tmp/.
         ConditionPathExists=/etc/kubeadm.yml
+        After=network.target
         [Service]
         # To not restart the unit when it exits, as it is expected.
         Type=oneshot

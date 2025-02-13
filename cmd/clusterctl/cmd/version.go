@@ -39,10 +39,11 @@ type versionOptions struct {
 var vo = &versionOptions{}
 
 var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print clusterctl version",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "version",
+	GroupID: groupOther,
+	Short:   "Print clusterctl version",
+	Args:    cobra.NoArgs,
+	RunE: func(*cobra.Command, []string) error {
 		return runVersion()
 	},
 }

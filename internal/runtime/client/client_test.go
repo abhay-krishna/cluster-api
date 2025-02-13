@@ -23,27 +23,29 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"regexp"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/admission/plugin/webhook/testcerts"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	runtimev1 "sigs.k8s.io/cluster-api/exp/runtime/api/v1alpha1"
 	runtimecatalog "sigs.k8s.io/cluster-api/exp/runtime/catalog"
+	runtimeclient "sigs.k8s.io/cluster-api/exp/runtime/client"
 	runtimehooksv1 "sigs.k8s.io/cluster-api/exp/runtime/hooks/api/v1alpha1"
 	runtimeregistry "sigs.k8s.io/cluster-api/internal/runtime/registry"
 	fakev1alpha1 "sigs.k8s.io/cluster-api/internal/runtime/test/v1alpha1"
 	fakev1alpha2 "sigs.k8s.io/cluster-api/internal/runtime/test/v1alpha2"
+	"sigs.k8s.io/cluster-api/util/cache"
 )
 
 func TestClient_httpCall(t *testing.T) {
@@ -182,7 +184,7 @@ func TestClient_httpCall(t *testing.T) {
 		},
 	}
 	for _, tt := range tableTests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(*testing.T) {
 			// a http server is only required if we have a valid catalog, otherwise httpCall will not reach out to the server
 			if tt.opts != nil && tt.opts.catalog != nil {
 				// create http server with fakeHookHandler
@@ -194,7 +196,7 @@ func TestClient_httpCall(t *testing.T) {
 				defer srv.Close()
 
 				// set url to srv for in tt.opts
-				tt.opts.config.URL = pointer.String(srv.URL)
+				tt.opts.config.URL = ptr.To(srv.URL)
 				tt.opts.config.CABundle = testcerts.CACert
 			}
 
@@ -202,13 +204,13 @@ func TestClient_httpCall(t *testing.T) {
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	}
 }
 
-func fakeHookHandler(w http.ResponseWriter, r *http.Request) {
+func fakeHookHandler(w http.ResponseWriter, _ *http.Request) {
 	response := &fakev1alpha1.FakeResponse{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "FakeHookResponse",
@@ -257,7 +259,7 @@ func TestURLForExtension(t *testing.T) {
 					Service: &runtimev1.ServiceReference{
 						Namespace: "test1",
 						Name:      "extension-service",
-						Port:      pointer.Int32(8443),
+						Port:      ptr.To[int32](8443),
 					},
 				},
 				gvh:                  gvh,
@@ -277,7 +279,7 @@ func TestURLForExtension(t *testing.T) {
 					Service: &runtimev1.ServiceReference{
 						Namespace: "test1",
 						Name:      "extension-service",
-						Port:      pointer.Int32(8443),
+						Port:      ptr.To[int32](8443),
 					},
 					CABundle: []byte("some-ca-data"),
 				},
@@ -295,7 +297,7 @@ func TestURLForExtension(t *testing.T) {
 			name: "ClientConfig using URL should have correct URL values",
 			args: args{
 				config: runtimev1.ClientConfig{
-					URL: pointer.String("https://extension-host.com"),
+					URL: ptr.To("https://extension-host.com"),
 				},
 				gvh:                  gvh,
 				extensionHandlerName: "test-handler",
@@ -325,7 +327,7 @@ func TestURLForExtension(t *testing.T) {
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(u.Scheme).To(Equal(tt.want.scheme))
 				g.Expect(u.Host).To(Equal(tt.want.host))
 				g.Expect(u.Path).To(Equal(tt.want.path))
@@ -362,7 +364,7 @@ func Test_defaultAndValidateDiscoveryResponse(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "error with name violating DNS1123",
+			name: "error if handler name has capital letters",
 			discovery: &runtimehooksv1.DiscoveryResponse{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "DiscoveryResponse",
@@ -370,6 +372,23 @@ func Test_defaultAndValidateDiscoveryResponse(t *testing.T) {
 				},
 				Handlers: []runtimehooksv1.ExtensionHandler{{
 					Name: "HAS-CAPITAL-LETTERS",
+					RequestHook: runtimehooksv1.GroupVersionHook{
+						Hook:       "FakeHook",
+						APIVersion: fakev1alpha1.GroupVersion.String(),
+					},
+				}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "error if handler name has full stops",
+			discovery: &runtimehooksv1.DiscoveryResponse{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "DiscoveryResponse",
+					APIVersion: runtimehooksv1.GroupVersion.String(),
+				},
+				Handlers: []runtimehooksv1.ExtensionHandler{{
+					Name: "has.full.stops",
 					RequestHook: runtimehooksv1.GroupVersionHook{
 						Hook:       "FakeHook",
 						APIVersion: fakev1alpha1.GroupVersion.String(),
@@ -391,7 +410,7 @@ func Test_defaultAndValidateDiscoveryResponse(t *testing.T) {
 						Hook:       "FakeHook",
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 					},
-					TimeoutSeconds: pointer.Int32(100),
+					TimeoutSeconds: ptr.To[int32](100),
 				}},
 			},
 			wantErr: true,
@@ -409,7 +428,7 @@ func Test_defaultAndValidateDiscoveryResponse(t *testing.T) {
 						Hook:       "FakeHook",
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 					},
-					TimeoutSeconds: pointer.Int32(-1),
+					TimeoutSeconds: ptr.To[int32](-1),
 				}},
 			},
 			wantErr: true,
@@ -427,7 +446,7 @@ func Test_defaultAndValidateDiscoveryResponse(t *testing.T) {
 						Hook:       "FakeHook",
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 					},
-					TimeoutSeconds: pointer.Int32(20),
+					TimeoutSeconds: ptr.To[int32](20),
 					FailurePolicy:  &invalidFailurePolicy,
 				}},
 			},
@@ -526,10 +545,13 @@ func TestClient_CallExtension(t *testing.T) {
 	fpIgnore := runtimev1.FailurePolicyIgnore
 
 	validExtensionHandlerWithFailPolicy := runtimev1.ExtensionConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			ResourceVersion: "15",
+		},
 		Spec: runtimev1.ExtensionConfigSpec{
 			ClientConfig: runtimev1.ClientConfig{
 				// Set a fake URL, in test cases where we start the test server the URL will be overridden.
-				URL:      pointer.String("https://127.0.0.1/"),
+				URL:      ptr.To("https://127.0.0.1/"),
 				CABundle: testcerts.CACert,
 			},
 			NamespaceSelector: &metav1.LabelSelector{},
@@ -542,17 +564,20 @@ func TestClient_CallExtension(t *testing.T) {
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 						Hook:       "FakeHook",
 					},
-					TimeoutSeconds: pointer.Int32Ptr(1),
+					TimeoutSeconds: ptr.To[int32](1),
 					FailurePolicy:  &fpFail,
 				},
 			},
 		},
 	}
 	validExtensionHandlerWithIgnorePolicy := runtimev1.ExtensionConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			ResourceVersion: "15",
+		},
 		Spec: runtimev1.ExtensionConfigSpec{
 			ClientConfig: runtimev1.ClientConfig{
 				// Set a fake URL, in test cases where we start the test server the URL will be overridden.
-				URL:      pointer.String("https://127.0.0.1/"),
+				URL:      ptr.To("https://127.0.0.1/"),
 				CABundle: testcerts.CACert,
 			},
 			NamespaceSelector: &metav1.LabelSelector{}},
@@ -564,7 +589,7 @@ func TestClient_CallExtension(t *testing.T) {
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 						Hook:       "FakeHook",
 					},
-					TimeoutSeconds: pointer.Int32Ptr(1),
+					TimeoutSeconds: ptr.To[int32](1),
 					FailurePolicy:  &fpIgnore,
 				},
 			},
@@ -573,7 +598,7 @@ func TestClient_CallExtension(t *testing.T) {
 	type args struct {
 		hook     runtimecatalog.Hook
 		name     string
-		request  runtime.Object
+		request  runtimehooksv1.RequestObject
 		response runtimehooksv1.ResponseObject
 	}
 	tests := []struct {
@@ -582,6 +607,7 @@ func TestClient_CallExtension(t *testing.T) {
 		args                       args
 		testServer                 testServerConfig
 		wantErr                    bool
+		wantResponseCached         bool
 	}{
 		{
 			name:                       "should fail when hook and request/response are not compatible",
@@ -595,7 +621,8 @@ func TestClient_CallExtension(t *testing.T) {
 				request:  &fakev1alpha1.SecondFakeRequest{},
 				response: &fakev1alpha1.SecondFakeResponse{},
 			},
-			wantErr: true,
+			wantErr:            true,
+			wantResponseCached: false,
 		},
 		{
 			name:                       "should fail when hook GVH does not match the registered ExtensionHandler",
@@ -609,7 +636,8 @@ func TestClient_CallExtension(t *testing.T) {
 				request:  &fakev1alpha1.SecondFakeRequest{},
 				response: &fakev1alpha1.SecondFakeResponse{},
 			},
-			wantErr: true,
+			wantErr:            true,
+			wantResponseCached: false,
 		},
 		{
 			name:                       "should fail if ExtensionHandler is not registered",
@@ -626,7 +654,8 @@ func TestClient_CallExtension(t *testing.T) {
 				request:  &fakev1alpha1.FakeRequest{},
 				response: &fakev1alpha1.FakeResponse{},
 			},
-			wantErr: true,
+			wantErr:            true,
+			wantResponseCached: false,
 		},
 		{
 			name:                       "should succeed when calling ExtensionHandler with success response and FailurePolicyFail",
@@ -636,13 +665,15 @@ func TestClient_CallExtension(t *testing.T) {
 				responses: map[string]testServerResponse{
 					"/*": response(runtimehooksv1.ResponseStatusSuccess),
 				},
-			}, args: args{
+			},
+			args: args{
 				hook:     fakev1alpha1.FakeHook,
 				name:     "valid-extension",
 				request:  &fakev1alpha1.FakeRequest{},
 				response: &fakev1alpha1.FakeResponse{},
 			},
-			wantErr: false,
+			wantErr:            false,
+			wantResponseCached: true,
 		},
 		{
 			name:                       "should succeed when calling ExtensionHandler with success response and FailurePolicyIgnore",
@@ -652,13 +683,15 @@ func TestClient_CallExtension(t *testing.T) {
 				responses: map[string]testServerResponse{
 					"/*": response(runtimehooksv1.ResponseStatusSuccess),
 				},
-			}, args: args{
+			},
+			args: args{
 				hook:     fakev1alpha1.FakeHook,
 				name:     "valid-extension",
 				request:  &fakev1alpha1.FakeRequest{},
 				response: &fakev1alpha1.FakeResponse{},
 			},
-			wantErr: false,
+			wantErr:            false,
+			wantResponseCached: true,
 		},
 		{
 			name:                       "should fail when calling ExtensionHandler with failure response and FailurePolicyFail",
@@ -668,13 +701,15 @@ func TestClient_CallExtension(t *testing.T) {
 				responses: map[string]testServerResponse{
 					"/*": response(runtimehooksv1.ResponseStatusFailure),
 				},
-			}, args: args{
+			},
+			args: args{
 				hook:     fakev1alpha1.FakeHook,
 				name:     "valid-extension",
 				request:  &fakev1alpha1.FakeRequest{},
 				response: &fakev1alpha1.FakeResponse{},
 			},
-			wantErr: true,
+			wantErr:            true,
+			wantResponseCached: false,
 		},
 		{
 			name:                       "should fail when calling ExtensionHandler with failure response and FailurePolicyIgnore",
@@ -684,13 +719,15 @@ func TestClient_CallExtension(t *testing.T) {
 				responses: map[string]testServerResponse{
 					"/*": response(runtimehooksv1.ResponseStatusFailure),
 				},
-			}, args: args{
+			},
+			args: args{
 				hook:     fakev1alpha1.FakeHook,
 				name:     "valid-extension",
 				request:  &fakev1alpha1.FakeRequest{},
 				response: &fakev1alpha1.FakeResponse{},
 			},
-			wantErr: true,
+			wantErr:            true,
+			wantResponseCached: false,
 		},
 
 		{
@@ -698,26 +735,30 @@ func TestClient_CallExtension(t *testing.T) {
 			registeredExtensionConfigs: []runtimev1.ExtensionConfig{validExtensionHandlerWithIgnorePolicy},
 			testServer: testServerConfig{
 				start: false,
-			}, args: args{
+			},
+			args: args{
 				hook:     fakev1alpha1.FakeHook,
 				name:     "valid-extension",
 				request:  &fakev1alpha1.FakeRequest{},
 				response: &fakev1alpha1.FakeResponse{},
 			},
-			wantErr: false,
+			wantErr:            false,
+			wantResponseCached: false, // Note: We only want to cache entirely successful responses.
 		},
 		{
 			name:                       "should fail with unreachable extension and FailurePolicyFail",
 			registeredExtensionConfigs: []runtimev1.ExtensionConfig{validExtensionHandlerWithFailPolicy},
 			testServer: testServerConfig{
 				start: false,
-			}, args: args{
+			},
+			args: args{
 				hook:     fakev1alpha1.FakeHook,
 				name:     "valid-extension",
 				request:  &fakev1alpha1.FakeRequest{},
 				response: &fakev1alpha1.FakeResponse{},
 			},
-			wantErr: true,
+			wantErr:            true,
+			wantResponseCached: false,
 		},
 	}
 
@@ -725,14 +766,17 @@ func TestClient_CallExtension(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
+			var serverCallCount int
 			if tt.testServer.start {
-				srv := createSecureTestServer(tt.testServer)
+				srv := createSecureTestServer(tt.testServer, func() {
+					serverCallCount++
+				})
 				srv.StartTLS()
 				defer srv.Close()
 
 				// Set the URL to the real address of the test server.
 				for i := range tt.registeredExtensionConfigs {
-					tt.registeredExtensionConfigs[i].Spec.ClientConfig.URL = pointer.String(fmt.Sprintf("https://%s/", srv.Listener.Addr().String()))
+					tt.registeredExtensionConfigs[i].Spec.ClientConfig.URL = ptr.To(fmt.Sprintf("https://%s/", srv.Listener.Addr().String()))
 				}
 			}
 
@@ -755,15 +799,135 @@ func TestClient_CallExtension(t *testing.T) {
 					Namespace: "foo",
 				},
 			}
+			// Call once without caching.
 			err := c.CallExtension(context.Background(), tt.args.hook, obj, tt.args.name, tt.args.request, tt.args.response)
-
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			// Call again with caching.
+			serverCallCount = 0
+			cache := cache.New[runtimeclient.CallExtensionCacheEntry]()
+			err = c.CallExtension(context.Background(), tt.args.hook, obj, tt.args.name, tt.args.request, tt.args.response,
+				runtimeclient.WithCaching{Cache: cache, CacheKeyFunc: cacheKeyFunc})
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			if tt.wantResponseCached {
+				// When we expect the response to be cached we expect 1 call to the server.
+				g.Expect(serverCallCount).To(Equal(1))
+				cacheEntry, isCached := cache.Has("valid-extension-15")
+				g.Expect(isCached).To(BeTrue())
+				g.Expect(cacheEntry).ToNot(BeNil())
+
+				err = c.CallExtension(context.Background(), tt.args.hook, obj, tt.args.name, tt.args.request, tt.args.response,
+					runtimeclient.WithCaching{Cache: cache, CacheKeyFunc: cacheKeyFunc})
+				// When we expect the response to be cached we always expect no errors.
+				g.Expect(err).ToNot(HaveOccurred())
+				// As the response is cached we expect no further calls to the server.
+				g.Expect(serverCallCount).To(Equal(1))
+				cacheEntry, isCached = cache.Has("valid-extension-15")
+				g.Expect(isCached).To(BeTrue())
+				g.Expect(cacheEntry).ToNot(BeNil())
+			} else {
+				_, isCached := cache.Has("valid-extension-15")
+				g.Expect(isCached).To(BeFalse())
 			}
 		})
 	}
+}
+
+func cacheKeyFunc(extensionName, extensionConfigResourceVersion string, request runtimehooksv1.RequestObject) string {
+	// Note: extensionName is identical to the value of the name parameter passed into CallExtension.
+	s := fmt.Sprintf("%s-%s", extensionName, extensionConfigResourceVersion)
+	for k, v := range request.GetSettings() {
+		s += fmt.Sprintf(",%s=%s", k, v)
+	}
+	return s
+}
+
+func TestPrepareRequest(t *testing.T) {
+	t.Run("request should have the correct settings", func(t *testing.T) {
+		tests := []struct {
+			name         string
+			request      runtimehooksv1.RequestObject
+			registration *runtimeregistry.ExtensionRegistration
+			want         map[string]string
+		}{
+			{
+				name: "settings in request should be preserved as is if there are not setting in the registration",
+				request: &runtimehooksv1.BeforeClusterCreateRequest{
+					CommonRequest: runtimehooksv1.CommonRequest{
+						Settings: map[string]string{
+							"key1": "value1",
+						},
+					},
+				},
+				registration: &runtimeregistry.ExtensionRegistration{},
+				want: map[string]string{
+					"key1": "value1",
+				},
+			},
+			{
+				name: "settings in registration should be used as is if there are no settings in the request",
+				request: &runtimehooksv1.BeforeClusterCreateRequest{
+					CommonRequest: runtimehooksv1.CommonRequest{},
+				},
+				registration: &runtimeregistry.ExtensionRegistration{
+					Settings: map[string]string{
+						"key1": "value1",
+					},
+				},
+				want: map[string]string{
+					"key1": "value1",
+				},
+			},
+			{
+				name: "settings in request and registry should be merged with request taking precedence",
+				request: &runtimehooksv1.BeforeClusterCreateRequest{
+					CommonRequest: runtimehooksv1.CommonRequest{
+						Settings: map[string]string{
+							"key1": "value1",
+							"key2": "value2",
+						},
+					},
+				},
+				registration: &runtimeregistry.ExtensionRegistration{
+					Settings: map[string]string{
+						"key1": "value11",
+						"key3": "value3",
+					},
+				},
+				want: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+					"key3": "value3",
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				g := NewWithT(t)
+				var originalRegistrationSettings map[string]string
+				if tt.registration.Settings != nil {
+					originalRegistrationSettings = map[string]string{}
+					for k, v := range tt.registration.Settings {
+						originalRegistrationSettings[k] = v
+					}
+				}
+
+				g.Expect(cloneAndAddSettings(tt.request, tt.registration.Settings).GetSettings()).To(Equal(tt.want))
+				// Make sure that the original settings in the registration are not modified.
+				g.Expect(tt.registration.Settings).To(Equal(originalRegistrationSettings))
+			})
+		}
+	})
 }
 
 func TestClient_CallAllExtensions(t *testing.T) {
@@ -782,7 +946,7 @@ func TestClient_CallAllExtensions(t *testing.T) {
 		Spec: runtimev1.ExtensionConfigSpec{
 			ClientConfig: runtimev1.ClientConfig{
 				// Set a fake URL, in test cases where we start the test server the URL will be overridden.
-				URL:      pointer.String("https://127.0.0.1/"),
+				URL:      ptr.To("https://127.0.0.1/"),
 				CABundle: testcerts.CACert,
 			},
 			NamespaceSelector: &metav1.LabelSelector{},
@@ -795,7 +959,7 @@ func TestClient_CallAllExtensions(t *testing.T) {
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 						Hook:       "FakeHook",
 					},
-					TimeoutSeconds: pointer.Int32Ptr(1),
+					TimeoutSeconds: ptr.To[int32](1),
 					FailurePolicy:  &fpFail,
 				},
 				{
@@ -804,7 +968,7 @@ func TestClient_CallAllExtensions(t *testing.T) {
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 						Hook:       "FakeHook",
 					},
-					TimeoutSeconds: pointer.Int32Ptr(1),
+					TimeoutSeconds: ptr.To[int32](1),
 					FailurePolicy:  &fpFail,
 				},
 				{
@@ -813,7 +977,7 @@ func TestClient_CallAllExtensions(t *testing.T) {
 						APIVersion: fakev1alpha1.GroupVersion.String(),
 						Hook:       "FakeHook",
 					},
-					TimeoutSeconds: pointer.Int32Ptr(1),
+					TimeoutSeconds: ptr.To[int32](1),
 					FailurePolicy:  &fpFail,
 				},
 			},
@@ -822,7 +986,7 @@ func TestClient_CallAllExtensions(t *testing.T) {
 
 	type args struct {
 		hook     runtimecatalog.Hook
-		request  runtime.Object
+		request  runtimehooksv1.RequestObject
 		response runtimehooksv1.ResponseObject
 	}
 	tests := []struct {
@@ -938,7 +1102,7 @@ func TestClient_CallAllExtensions(t *testing.T) {
 
 				// Set the URL to the real address of the test server.
 				for i := range tt.registeredExtensionConfigs {
-					tt.registeredExtensionConfigs[i].Spec.ClientConfig.URL = pointer.String(fmt.Sprintf("https://%s/", srv.Listener.Addr().String()))
+					tt.registeredExtensionConfigs[i].Spec.ClientConfig.URL = ptr.To(fmt.Sprintf("https://%s/", srv.Listener.Addr().String()))
 				}
 			}
 
@@ -965,7 +1129,7 @@ func TestClient_CallAllExtensions(t *testing.T) {
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
-				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	}
@@ -1006,7 +1170,7 @@ func Test_client_matchNamespace(t *testing.T) {
 			},
 		},
 	})
-	g.Expect(err).To(BeNil())
+	g.Expect(err).ToNot(HaveOccurred())
 	notMatchingMatchExpressions, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
@@ -1016,7 +1180,7 @@ func Test_client_matchNamespace(t *testing.T) {
 			},
 		},
 	})
-	g.Expect(err).To(BeNil())
+	g.Expect(err).ToNot(HaveOccurred())
 	tests := []struct {
 		name               string
 		selector           labels.Selector
@@ -1094,38 +1258,38 @@ func Test_aggregateResponses(t *testing.T) {
 	}{
 		{
 			name:              "Aggregate response if there is only one response",
-			aggregateResponse: fakeSuccessResponse(),
+			aggregateResponse: fakeSuccessResponse(""),
 			responses: []runtimehooksv1.ResponseObject{
-				fakeSuccessResponse(),
+				fakeSuccessResponse("test"),
 			},
-			want: fakeSuccessResponse(),
+			want: fakeSuccessResponse("test"),
 		},
 		{
 			name:              "Aggregate retry response if there is only one response",
-			aggregateResponse: fakeRetryableSuccessResponse(0),
+			aggregateResponse: fakeRetryableSuccessResponse(0, ""),
 			responses: []runtimehooksv1.ResponseObject{
-				fakeRetryableSuccessResponse(5),
+				fakeRetryableSuccessResponse(5, "test"),
 			},
-			want: fakeRetryableSuccessResponse(5),
+			want: fakeRetryableSuccessResponse(5, "test"),
 		},
 		{
 			name:              "Aggregate retry responses to lowest non-zero retryAfterSeconds value",
-			aggregateResponse: fakeRetryableSuccessResponse(0),
+			aggregateResponse: fakeRetryableSuccessResponse(0, ""),
 			responses: []runtimehooksv1.ResponseObject{
-				fakeRetryableSuccessResponse(0),
-				fakeRetryableSuccessResponse(1),
-				fakeRetryableSuccessResponse(5),
-				fakeRetryableSuccessResponse(4),
-				fakeRetryableSuccessResponse(3),
+				fakeRetryableSuccessResponse(0, "test1"),
+				fakeRetryableSuccessResponse(1, "test2"),
+				fakeRetryableSuccessResponse(5, ""),
+				fakeRetryableSuccessResponse(4, ""),
+				fakeRetryableSuccessResponse(3, ""),
 			},
-			want: fakeRetryableSuccessResponse(1),
+			want: fakeRetryableSuccessResponse(1, "test1, test2"),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			aggregateSuccessfulResponses(tt.aggregateResponse, tt.responses)
 
-			if !reflect.DeepEqual(tt.aggregateResponse, tt.want) {
+			if !cmp.Equal(tt.aggregateResponse, tt.want) {
 				t.Errorf("aggregateSuccessfulResponses() got = %v, want %v", tt.aggregateResponse, tt.want)
 			}
 		})
@@ -1153,9 +1317,13 @@ func response(status runtimehooksv1.ResponseStatus) testServerResponse {
 	}
 }
 
-func createSecureTestServer(server testServerConfig) *httptest.Server {
+func createSecureTestServer(server testServerConfig, callbacks ...func()) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		for _, callback := range callbacks {
+			callback()
+		}
+
 		// Write the response for the first match in tt.testServer.responses.
 		for pathRegex, resp := range server.responses {
 			if !regexp.MustCompile(pathRegex).MatchString(r.URL.Path) {
@@ -1191,27 +1359,27 @@ func registry(configs []runtimev1.ExtensionConfig) runtimeregistry.ExtensionRegi
 	return registry
 }
 
-func fakeSuccessResponse() *fakev1alpha1.FakeResponse {
+func fakeSuccessResponse(message string) *fakev1alpha1.FakeResponse {
 	return &fakev1alpha1.FakeResponse{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "FakeResponse",
 			APIVersion: "v1alpha1",
 		},
 		CommonResponse: runtimehooksv1.CommonResponse{
-			Message: "",
+			Message: message,
 			Status:  runtimehooksv1.ResponseStatusSuccess,
 		},
 	}
 }
 
-func fakeRetryableSuccessResponse(retryAfterSeconds int32) *fakev1alpha1.RetryableFakeResponse {
+func fakeRetryableSuccessResponse(retryAfterSeconds int32, message string) *fakev1alpha1.RetryableFakeResponse {
 	return &fakev1alpha1.RetryableFakeResponse{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "FakeResponse",
 			APIVersion: "v1alpha1",
 		},
 		CommonResponse: runtimehooksv1.CommonResponse{
-			Message: "",
+			Message: message,
 			Status:  runtimehooksv1.ResponseStatusSuccess,
 		},
 		CommonRetryResponse: runtimehooksv1.CommonRetryResponse{
@@ -1231,4 +1399,72 @@ func newUnstartedTLSServer(handler http.Handler) *httptest.Server {
 		Certificates: []tls.Certificate{cert},
 	}
 	return srv
+}
+
+func TestNameForHandler(t *testing.T) {
+	tests := []struct {
+		name            string
+		handler         runtimehooksv1.ExtensionHandler
+		extensionConfig *runtimev1.ExtensionConfig
+		want            string
+		wantErr         bool
+	}{
+		{
+			name:            "return well formatted name",
+			handler:         runtimehooksv1.ExtensionHandler{Name: "discover-variables"},
+			extensionConfig: &runtimev1.ExtensionConfig{ObjectMeta: metav1.ObjectMeta{Name: "runtime1"}},
+			want:            "discover-variables.runtime1",
+		},
+		{
+			name:            "return well formatted name",
+			handler:         runtimehooksv1.ExtensionHandler{Name: "discover-variables"},
+			extensionConfig: nil,
+			wantErr:         true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NameForHandler(tt.handler, tt.extensionConfig)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NameForHandler() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("NameForHandler() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtensionNameFromHandlerName(t *testing.T) {
+	tests := []struct {
+		name                  string
+		registeredHandlerName string
+		want                  string
+		wantErr               bool
+	}{
+		{
+			name:                  "Get name from correctly formatted handler name",
+			registeredHandlerName: "discover-variables.runtime1",
+			want:                  "runtime1",
+		},
+		{
+			name: "error from incorrectly formatted handler name",
+			// Two periods make this name badly formed.
+			registeredHandlerName: "discover-variables.runtime.1",
+			wantErr:               true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ExtensionNameFromHandlerName(tt.registeredHandlerName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExtensionNameFromHandlerName() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("ExtensionNameFromHandlerName() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

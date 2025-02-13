@@ -25,24 +25,31 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/kind/pkg/cluster/constants"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
-	"sigs.k8s.io/cluster-api/controllers/remote"
+	"sigs.k8s.io/cluster-api/controllers/clustercache"
+	utilexp "sigs.k8s.io/cluster-api/exp/util"
 	"sigs.k8s.io/cluster-api/test/infrastructure/container"
 	infrav1 "sigs.k8s.io/cluster-api/test/infrastructure/docker/api/v1beta1"
 	"sigs.k8s.io/cluster-api/test/infrastructure/docker/internal/docker"
 	"sigs.k8s.io/cluster-api/util"
-	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/cluster-api/util/finalizers"
+	"sigs.k8s.io/cluster-api/util/labels"
+	clog "sigs.k8s.io/cluster-api/util/log"
 	"sigs.k8s.io/cluster-api/util/patch"
+	"sigs.k8s.io/cluster-api/util/paused"
 	"sigs.k8s.io/cluster-api/util/predicates"
 )
 
@@ -50,13 +57,17 @@ import (
 type DockerMachineReconciler struct {
 	client.Client
 	ContainerRuntime container.Runtime
-	Tracker          *remote.ClusterCacheTracker
+	ClusterCache     clustercache.ClusterCache
+
+	// WatchFilterValue is the label value used to filter events prior to reconciliation.
+	WatchFilterValue string
 }
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=dockermachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=dockermachines/status;dockermachines/finalizers,verbs=get;update;patch
-// +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;machines,verbs=get;list;watch
+// +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;machinesets;machines,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets;,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 
 // Reconcile handles DockerMachine events.
 func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, rerr error) {
@@ -72,6 +83,18 @@ func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	// Add finalizer first if not set to avoid the race condition between init and delete.
+	if finalizerAdded, err := finalizers.EnsureFinalizer(ctx, r.Client, dockerMachine, infrav1.MachineFinalizer); err != nil || finalizerAdded {
+		return ctrl.Result{}, err
+	}
+
+	// AddOwners adds the owners of DockerMachine as k/v pairs to the logger.
+	// Specifically, it will add KubeadmControlPlane, MachineSet and MachineDeployment.
+	ctx, log, err := clog.AddOwners(ctx, r.Client, dockerMachine)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Fetch the Machine.
 	machine, err := util.GetOwnerMachine(ctx, r.Client, dockerMachine.ObjectMeta)
 	if err != nil {
@@ -82,7 +105,8 @@ func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	log = log.WithValues("machine", machine.Name)
+	log = log.WithValues("Machine", klog.KObj(machine))
+	ctx = ctrl.LoggerInto(ctx, log)
 
 	// Fetch the Cluster.
 	cluster, err := util.GetClusterFromMetadata(ctx, r.Client, machine.ObjectMeta)
@@ -91,15 +115,19 @@ func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 	if cluster == nil {
-		log.Info(fmt.Sprintf("Please associate this machine with a cluster using the label %s: <name of cluster>", clusterv1.ClusterLabelName))
+		log.Info(fmt.Sprintf("Please associate this machine with a cluster using the label %s: <name of cluster>", clusterv1.ClusterNameLabel))
 		return ctrl.Result{}, nil
 	}
 
-	log = log.WithValues("cluster", cluster.Name)
+	log = log.WithValues("Cluster", klog.KObj(cluster))
+	ctx = ctrl.LoggerInto(ctx, log)
 
-	// Return early if the object or Cluster is paused.
-	if annotations.IsPaused(cluster, dockerMachine) {
-		log.Info("Reconciliation is paused for this object")
+	if isPaused, conditionChanged, err := paused.EnsurePausedCondition(ctx, r.Client, cluster, dockerMachine); err != nil || isPaused || conditionChanged {
+		return ctrl.Result{}, err
+	}
+
+	if cluster.Spec.InfrastructureRef == nil {
+		log.Info("Cluster infrastructureRef is not available yet")
 		return ctrl.Result{}, nil
 	}
 
@@ -114,8 +142,6 @@ func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	log = log.WithValues("docker-cluster", dockerCluster.Name)
-
 	// Initialize the patch helper
 	patchHelper, err := patch.NewHelper(dockerMachine, r)
 	if err != nil {
@@ -124,21 +150,25 @@ func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Always attempt to Patch the DockerMachine object and status after each reconciliation.
 	defer func() {
 		if err := patchDockerMachine(ctx, patchHelper, dockerMachine); err != nil {
-			log.Error(err, "failed to patch DockerMachine")
+			log.Error(err, "Failed to patch DockerMachine")
 			if rerr == nil {
 				rerr = err
 			}
 		}
 	}()
 
-	// Add finalizer first if not exist to avoid the race condition between init and delete
-	if !controllerutil.ContainsFinalizer(dockerMachine, infrav1.MachineFinalizer) {
-		controllerutil.AddFinalizer(dockerMachine, infrav1.MachineFinalizer)
-		return ctrl.Result{}, nil
+	// Create a helper for managing the Docker container hosting the machine.
+	// The DockerMachine needs a way to know the name of the Docker container, before MachinePool Machines were implemented, it used the name of the owner Machine.
+	// But since the DockerMachine type is used for both MachineDeployment Machines and MachinePool Machines, we need to accommodate both:
+	// - For MachineDeployments/Control Planes, we continue using the name of the Machine so that it is backwards compatible in the CAPI version upgrade scenario .
+	// - For MachinePools, the order of creation is Docker container -> DockerMachine -> Machine. Since the Docker container is created first, and the Machine name is
+	//   randomly generated by the MP controller, we create the DockerMachine with the same name as the container to maintain this association.
+	name := machine.Name
+	if labels.IsMachinePoolOwned(dockerMachine) {
+		name = dockerMachine.Name
 	}
 
-	// Create a helper for managing the docker container hosting the machine.
-	externalMachine, err := docker.NewMachine(ctx, cluster, machine.Name, nil)
+	externalMachine, err := docker.NewMachine(ctx, cluster, name, nil)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to create helper for managing the externalMachine")
 	}
@@ -154,11 +184,18 @@ func (r *DockerMachineReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Handle deleted machines
 	if !dockerMachine.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, machine, dockerMachine, externalMachine, externalLoadBalancer)
+		return ctrl.Result{}, r.reconcileDelete(ctx, cluster, dockerCluster, machine, dockerMachine, externalMachine, externalLoadBalancer)
 	}
 
 	// Handle non-deleted machines
-	return r.reconcileNormal(ctx, cluster, machine, dockerMachine, externalMachine, externalLoadBalancer)
+	res, err := r.reconcileNormal(ctx, cluster, dockerCluster, machine, dockerMachine, externalMachine, externalLoadBalancer)
+	// Requeue if the reconcile failed because the ClusterCacheTracker was locked for
+	// the current cluster because of concurrent access.
+	if errors.Is(err, clustercache.ErrClusterNotConnected) {
+		log.V(5).Info("Requeuing because connection to the workload cluster is down")
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+	return res, err
 }
 
 func patchDockerMachine(ctx context.Context, patchHelper *patch.Helper, dockerMachine *infrav1.DockerMachine) error {
@@ -184,7 +221,7 @@ func patchDockerMachine(ctx context.Context, patchHelper *patch.Helper, dockerMa
 	)
 }
 
-func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *clusterv1.Cluster, machine *clusterv1.Machine, dockerMachine *infrav1.DockerMachine, externalMachine *docker.Machine, externalLoadBalancer *docker.LoadBalancer) (res ctrl.Result, retErr error) {
+func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *clusterv1.Cluster, dockerCluster *infrav1.DockerCluster, machine *clusterv1.Machine, dockerMachine *infrav1.DockerMachine, externalMachine *docker.Machine, externalLoadBalancer *docker.LoadBalancer) (res ctrl.Result, retErr error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	// Check if the infrastructure is ready, otherwise return and wait for the cluster object to be updated
@@ -192,6 +229,39 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 		log.Info("Waiting for DockerCluster Controller to create cluster infrastructure")
 		conditions.MarkFalse(dockerMachine, infrav1.ContainerProvisionedCondition, infrav1.WaitingForClusterInfrastructureReason, clusterv1.ConditionSeverityInfo, "")
 		return ctrl.Result{}, nil
+	}
+
+	var dataSecretName *string
+	var version *string
+
+	if labels.IsMachinePoolOwned(dockerMachine) {
+		machinePool, err := utilexp.GetMachinePoolByLabels(ctx, r.Client, dockerMachine.GetNamespace(), dockerMachine.Labels)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "failed to get machine pool for DockerMachine %s/%s", dockerMachine.GetNamespace(), dockerMachine.GetName())
+		}
+		if machinePool == nil {
+			log.Info("No MachinePool matching labels found, returning without error")
+			return ctrl.Result{}, nil
+		}
+
+		dataSecretName = machinePool.Spec.Template.Spec.Bootstrap.DataSecretName
+		version = machinePool.Spec.Template.Spec.Version
+	} else {
+		dataSecretName = machine.Spec.Bootstrap.DataSecretName
+		version = machine.Spec.Version
+	}
+
+	// if the corresponding machine is deleted but the docker machine not yet, update load balancer configuration to divert all traffic from this instance
+	if util.IsControlPlaneMachine(machine) && !machine.DeletionTimestamp.IsZero() && dockerMachine.DeletionTimestamp.IsZero() {
+		if _, ok := dockerMachine.Annotations["dockermachine.infrastructure.cluster.x-k8s.io/weight"]; !ok {
+			if err := r.reconcileLoadBalancerConfiguration(ctx, cluster, dockerCluster, externalLoadBalancer); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if dockerMachine.Annotations == nil {
+			dockerMachine.Annotations = map[string]string{}
+		}
+		dockerMachine.Annotations["dockermachine.infrastructure.cluster.x-k8s.io/weight"] = "0"
 	}
 
 	// if the machine is already provisioned, return
@@ -213,7 +283,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	}
 
 	// Make sure bootstrap data is available and populated.
-	if machine.Spec.Bootstrap.DataSecretName == nil {
+	if dataSecretName == nil {
 		if !util.IsControlPlaneMachine(machine) && !conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) {
 			log.Info("Waiting for the control plane to be initialized")
 			conditions.MarkFalse(dockerMachine, infrav1.ContainerProvisionedCondition, clusterv1.WaitingForControlPlaneAvailableReason, clusterv1.ConditionSeverityInfo, "")
@@ -235,7 +305,7 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	if !externalMachine.Exists() {
 		// NOTE: FailureDomains don't mean much in CAPD since it's all local, but we are setting a label on
 		// each container, so we can check placement.
-		if err := externalMachine.Create(ctx, dockerMachine.Spec.CustomImage, role, machine.Spec.Version, docker.FailureDomainLabel(machine.Spec.FailureDomain), dockerMachine.Spec.ExtraMounts); err != nil {
+		if err := externalMachine.Create(ctx, dockerMachine.Spec.CustomImage, role, machine.Spec.Version, docker.FailureDomainLabel(machine.Spec.FailureDomain), dockerMachine.Spec.ExtraMounts, util.IsEtcdMachine(machine)); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "failed to create worker DockerMachine")
 		}
 	}
@@ -251,8 +321,8 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	// we should only do this once, as reconfiguration more or less ensures
 	// node ref setting fails
 	if util.IsControlPlaneMachine(machine) && !dockerMachine.Status.LoadBalancerConfigured {
-		if err := externalLoadBalancer.UpdateConfiguration(ctx); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update DockerCluster.loadbalancer configuration")
+		if err := r.reconcileLoadBalancerConfiguration(ctx, cluster, dockerCluster, externalLoadBalancer); err != nil {
+			return ctrl.Result{}, err
 		}
 		dockerMachine.Status.LoadBalancerConfigured = true
 	}
@@ -279,25 +349,60 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 
 	// if the machine isn't bootstrapped, only then run bootstrap scripts
 	if !dockerMachine.Spec.Bootstrapped {
-		bootstrapData, format, err := r.getBootstrapData(ctx, machine)
-		if err != nil {
-			log.Error(err, "failed to get bootstrap data")
-			return ctrl.Result{}, err
+		var bootstrapTimeout metav1.Duration
+		if dockerMachine.Spec.BootstrapTimeout != nil {
+			bootstrapTimeout = *dockerMachine.Spec.BootstrapTimeout
+		} else {
+			bootstrapTimeout = metav1.Duration{Duration: 3 * time.Minute}
 		}
-
-		timeoutctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		timeoutCtx, cancel := context.WithTimeout(ctx, bootstrapTimeout.Duration)
 		defer cancel()
-		// Run the bootstrap script. Simulates cloud-init/Ignition.
-		if err := externalMachine.ExecBootstrap(timeoutctx, bootstrapData, format); err != nil {
-			conditions.MarkFalse(dockerMachine, infrav1.BootstrapExecSucceededCondition, infrav1.BootstrapFailedReason, clusterv1.ConditionSeverityWarning, "Repeating bootstrap")
-			return ctrl.Result{}, errors.Wrap(err, "failed to exec DockerMachine bootstrap")
-		}
-		// Check for bootstrap success
-		if err := externalMachine.CheckForBootstrapSuccess(timeoutctx); err != nil {
-			conditions.MarkFalse(dockerMachine, infrav1.BootstrapExecSucceededCondition, infrav1.BootstrapFailedReason, clusterv1.ConditionSeverityWarning, "Repeating bootstrap")
-			return ctrl.Result{}, errors.Wrap(err, "failed to check for existence of bootstrap success file at /run/cluster-api/bootstrap-success.complete")
-		}
 
+		// Check for bootstrap success
+		// We have to check here to make this reentrant for cases where the bootstrap works
+		// but bootstrapped is never set on the object. We only try to bootstrap if the machine
+		// is not already bootstrapped.
+		if err := externalMachine.CheckForBootstrapSuccess(timeoutCtx, false); err != nil {
+			// We know the bootstrap data is not nil because we checked above.
+			bootstrapData, format, err := r.getBootstrapData(timeoutCtx, dockerMachine.Namespace, *dataSecretName)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			// Setup a go routing to check for the machine being deleted while running bootstrap as a
+			// synchronous process, e.g. due to remediation. The routine stops when timeoutCtx is Done
+			// (either because canceled intentionally due to machine deletion or canceled by the defer cancel()
+			// call when exiting from this func).
+			go func() {
+				for {
+					select {
+					case <-timeoutCtx.Done():
+						return
+					default:
+						updatedDockerMachine := &infrav1.DockerMachine{}
+						if err := r.Client.Get(ctx, client.ObjectKeyFromObject(dockerMachine), updatedDockerMachine); err == nil &&
+							!updatedDockerMachine.DeletionTimestamp.IsZero() {
+							log.Info("Cancelling Bootstrap because the underlying machine has been deleted")
+							cancel()
+							return
+						}
+						time.Sleep(5 * time.Second)
+					}
+				}
+			}()
+
+			// Run the bootstrap script. Simulates cloud-init/Ignition.
+			if err := externalMachine.ExecBootstrap(timeoutCtx, bootstrapData, format, version, dockerMachine.Spec.CustomImage, util.IsEtcdMachine(machine)); err != nil {
+				conditions.MarkFalse(dockerMachine, infrav1.BootstrapExecSucceededCondition, infrav1.BootstrapFailedReason, clusterv1.ConditionSeverityWarning, "Repeating bootstrap")
+				return ctrl.Result{}, errors.Wrap(err, "failed to exec DockerMachine bootstrap")
+			}
+
+			// Check for bootstrap success
+			if err := externalMachine.CheckForBootstrapSuccess(timeoutCtx, true); err != nil {
+				conditions.MarkFalse(dockerMachine, infrav1.BootstrapExecSucceededCondition, infrav1.BootstrapFailedReason, clusterv1.ConditionSeverityWarning, "Repeating bootstrap")
+				return ctrl.Result{}, errors.Wrap(err, "failed to check for existence of bootstrap success file at /run/cluster-api/bootstrap-success.complete")
+			}
+		}
 		dockerMachine.Spec.Bootstrapped = true
 	}
 
@@ -305,23 +410,38 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	conditions.MarkTrue(dockerMachine, infrav1.BootstrapExecSucceededCondition)
 
 	if err := setMachineAddress(ctx, dockerMachine, externalMachine); err != nil {
-		log.Error(err, "failed to set the machine address")
+		log.Error(err, "Failed to set the machine address")
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	// Usually a cloud provider will do this, but there is no docker-cloud provider.
-	// Requeue if there is an error, as this is likely momentary load balancer
-	// state changes during control plane provisioning.
-	remoteClient, err := r.Tracker.GetClient(ctx, client.ObjectKeyFromObject(cluster))
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to generate workload cluster client")
+	// If the Cluster is using a control plane and the control plane is not yet initialized, there is no API server
+	// to contact to get the ProviderID for the Node hosted on this machine, so return early.
+	// NOTE: We are using RequeueAfter with a short interval in order to make test execution time more stable.
+	// NOTE: If the Cluster doesn't use a control plane, the ControlPlaneInitialized condition is only
+	// set to true after a control plane machine has a node ref. If we would requeue here in this case, the
+	// Machine will never get a node ref as ProviderID is required to set the node ref, so we would get a deadlock.
+	if cluster.Spec.ControlPlaneRef != nil &&
+		!conditions.IsTrue(cluster, clusterv1.ControlPlaneInitializedCondition) &&
+		!util.IsEtcdMachine(machine) {
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
-	if err := externalMachine.SetNodeProviderID(ctx, remoteClient); err != nil {
-		if errors.As(err, &docker.ContainerNotRunningError{}) {
-			return ctrl.Result{}, errors.Wrap(err, "failed to patch the Kubernetes node with the machine providerID")
+
+	// In case of an etcd cluster, there is no concept of kubernetes node. So we can generate the node Provider ID and set it on machine spec directly
+	if !util.IsEtcdMachine(machine) {
+		// Usually a cloud provider will do this, but there is no docker-cloud provider.
+		// Requeue if there is an error, as this is likely momentary load balancer
+		// state changes during control plane provisioning.
+		remoteClient, err := r.ClusterCache.GetClient(ctx, client.ObjectKeyFromObject(cluster))
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to generate workload cluster client")
 		}
-		log.Error(err, "failed to patch the Kubernetes node with the machine providerID")
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		if err := externalMachine.CloudProviderNodePatch(ctx, remoteClient, dockerMachine); err != nil {
+			if errors.As(err, &docker.ContainerNotRunningError{}) {
+				return ctrl.Result{}, errors.Wrap(err, "failed to patch the Kubernetes node with the machine providerID")
+			}
+			log.Error(err, "Failed to patch the Kubernetes node with the machine providerID")
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
 	}
 	// Set ProviderID so the Cluster API Machine Controller can pull it
 	providerID := externalMachine.ProviderID()
@@ -332,77 +452,118 @@ func (r *DockerMachineReconciler) reconcileNormal(ctx context.Context, cluster *
 	return ctrl.Result{}, nil
 }
 
-func (r *DockerMachineReconciler) reconcileDelete(ctx context.Context, machine *clusterv1.Machine, dockerMachine *infrav1.DockerMachine, externalMachine *docker.Machine, externalLoadBalancer *docker.LoadBalancer) (ctrl.Result, error) {
+func (r *DockerMachineReconciler) reconcileDelete(ctx context.Context, cluster *clusterv1.Cluster, dockerCluster *infrav1.DockerCluster, machine *clusterv1.Machine, dockerMachine *infrav1.DockerMachine, externalMachine *docker.Machine, externalLoadBalancer *docker.LoadBalancer) error {
 	// Set the ContainerProvisionedCondition reporting delete is started, and issue a patch in order to make
 	// this visible to the users.
 	// NB. The operation in docker is fast, so there is the chance the user will not notice the status change;
 	// nevertheless we are issuing a patch so we can test a pattern that will be used by other providers as well
 	patchHelper, err := patch.NewHelper(dockerMachine, r.Client)
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 	conditions.MarkFalse(dockerMachine, infrav1.ContainerProvisionedCondition, clusterv1.DeletingReason, clusterv1.ConditionSeverityInfo, "")
 	if err := patchDockerMachine(ctx, patchHelper, dockerMachine); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to patch DockerMachine")
+		return errors.Wrap(err, "failed to patch DockerMachine")
 	}
 
 	// delete the machine
 	if err := externalMachine.Delete(ctx); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "failed to delete DockerMachine")
+		return errors.Wrap(err, "failed to delete DockerMachine")
 	}
 
 	// if the deleted machine is a control-plane node, remove it from the load balancer configuration;
 	if util.IsControlPlaneMachine(machine) {
-		if err := externalLoadBalancer.UpdateConfiguration(ctx); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to update DockerCluster.loadbalancer configuration")
+		if err := r.reconcileLoadBalancerConfiguration(ctx, cluster, dockerCluster, externalLoadBalancer); err != nil {
+			return err
 		}
 	}
 
 	// Machine is deleted so remove the finalizer.
 	controllerutil.RemoveFinalizer(dockerMachine, infrav1.MachineFinalizer)
-	return ctrl.Result{}, nil
+	return nil
+}
+
+func (r *DockerMachineReconciler) reconcileLoadBalancerConfiguration(ctx context.Context, cluster *clusterv1.Cluster, dockerCluster *infrav1.DockerCluster, externalLoadBalancer *docker.LoadBalancer) error {
+	controlPlaneWeight := map[string]int{}
+
+	controlPlaneMachineList := &clusterv1.MachineList{}
+	if err := r.Client.List(ctx, controlPlaneMachineList, client.InNamespace(cluster.Namespace), client.MatchingLabels{
+		clusterv1.MachineControlPlaneLabel: "",
+		clusterv1.ClusterNameLabel:         cluster.Name,
+	}); err != nil {
+		return errors.Wrap(err, "failed to list control plane machines")
+	}
+
+	for _, m := range controlPlaneMachineList.Items {
+		containerName := docker.MachineContainerName(cluster.Name, m.Name)
+		controlPlaneWeight[containerName] = 100
+		if !m.DeletionTimestamp.IsZero() && len(controlPlaneMachineList.Items) > 1 {
+			controlPlaneWeight[containerName] = 0
+		}
+	}
+
+	unsafeLoadBalancerConfigTemplate, err := r.getUnsafeLoadBalancerConfigTemplate(ctx, dockerCluster)
+	if err != nil {
+		return errors.Wrap(err, "failed to retrieve HAProxy configuration from CustomHAProxyConfigTemplateRef")
+	}
+	if err := externalLoadBalancer.UpdateConfiguration(ctx, controlPlaneWeight, unsafeLoadBalancerConfigTemplate); err != nil {
+		return errors.Wrap(err, "failed to update DockerCluster.loadbalancer configuration")
+	}
+	return nil
 }
 
 // SetupWithManager will add watches for this controller.
 func (r *DockerMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, options controller.Options) error {
-	clusterToDockerMachines, err := util.ClusterToObjectsMapper(mgr.GetClient(), &infrav1.DockerMachineList{}, mgr.GetScheme())
+	if r.Client == nil || r.ContainerRuntime == nil || r.ClusterCache == nil {
+		return errors.New("Client, ContainerRuntime and ClusterCache must not be nil")
+	}
+
+	predicateLog := ctrl.LoggerFrom(ctx).WithValues("controller", "dockermachine")
+	clusterToDockerMachines, err := util.ClusterToTypedObjectsMapper(mgr.GetClient(), &infrav1.DockerMachineList{}, mgr.GetScheme())
 	if err != nil {
 		return err
 	}
 
-	c, err := ctrl.NewControllerManagedBy(mgr).
+	err = ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1.DockerMachine{}).
 		WithOptions(options).
-		WithEventFilter(predicates.ResourceNotPaused(ctrl.LoggerFrom(ctx))).
+		WithEventFilter(predicates.ResourceHasFilterLabel(mgr.GetScheme(), predicateLog, r.WatchFilterValue)).
 		Watches(
-			&source.Kind{Type: &clusterv1.Machine{}},
+			&clusterv1.Machine{},
 			handler.EnqueueRequestsFromMapFunc(util.MachineToInfrastructureMapFunc(infrav1.GroupVersion.WithKind("DockerMachine"))),
+			builder.WithPredicates(predicates.ResourceIsChanged(mgr.GetScheme(), predicateLog)),
 		).
 		Watches(
-			&source.Kind{Type: &infrav1.DockerCluster{}},
+			&infrav1.DockerCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.DockerClusterToDockerMachines),
+			builder.WithPredicates(predicates.ResourceIsChanged(mgr.GetScheme(), predicateLog)),
 		).
-		Build(r)
+		Watches(
+			&clusterv1.Cluster{},
+			handler.EnqueueRequestsFromMapFunc(clusterToDockerMachines),
+			builder.WithPredicates(predicates.All(mgr.GetScheme(), predicateLog,
+				predicates.ResourceIsChanged(mgr.GetScheme(), predicateLog),
+				predicates.ClusterPausedTransitionsOrInfrastructureReady(mgr.GetScheme(), predicateLog),
+			)),
+		).
+		WatchesRawSource(r.ClusterCache.GetClusterSource("dockermachine", clusterToDockerMachines)).
+		Complete(r)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed setting up with a controller manager")
 	}
-	return c.Watch(
-		&source.Kind{Type: &clusterv1.Cluster{}},
-		handler.EnqueueRequestsFromMapFunc(clusterToDockerMachines),
-		predicates.ClusterUnpausedAndInfrastructureReady(ctrl.LoggerFrom(ctx)),
-	)
+	return nil
 }
 
 // DockerClusterToDockerMachines is a handler.ToRequestsFunc to be used to enqueue
 // requests for reconciliation of DockerMachines.
-func (r *DockerMachineReconciler) DockerClusterToDockerMachines(o client.Object) []ctrl.Request {
+func (r *DockerMachineReconciler) DockerClusterToDockerMachines(ctx context.Context, o client.Object) []ctrl.Request {
 	result := []ctrl.Request{}
 	c, ok := o.(*infrav1.DockerCluster)
 	if !ok {
 		panic(fmt.Sprintf("Expected a DockerCluster but got a %T", o))
 	}
 
-	cluster, err := util.GetOwnerCluster(context.TODO(), r.Client, c.ObjectMeta)
+	cluster, err := util.GetOwnerCluster(ctx, r.Client, c.ObjectMeta)
 	switch {
 	case apierrors.IsNotFound(err) || cluster == nil:
 		return result
@@ -410,9 +571,9 @@ func (r *DockerMachineReconciler) DockerClusterToDockerMachines(o client.Object)
 		return result
 	}
 
-	labels := map[string]string{clusterv1.ClusterLabelName: cluster.Name}
+	labels := map[string]string{clusterv1.ClusterNameLabel: cluster.Name}
 	machineList := &clusterv1.MachineList{}
-	if err := r.Client.List(context.TODO(), machineList, client.InNamespace(c.Namespace), client.MatchingLabels(labels)); err != nil {
+	if err := r.Client.List(ctx, machineList, client.InNamespace(c.Namespace), client.MatchingLabels(labels)); err != nil {
 		return nil
 	}
 	for _, m := range machineList.Items {
@@ -426,15 +587,11 @@ func (r *DockerMachineReconciler) DockerClusterToDockerMachines(o client.Object)
 	return result
 }
 
-func (r *DockerMachineReconciler) getBootstrapData(ctx context.Context, machine *clusterv1.Machine) (string, bootstrapv1.Format, error) {
-	if machine.Spec.Bootstrap.DataSecretName == nil {
-		return "", "", errors.New("error retrieving bootstrap data: linked Machine's bootstrap.dataSecretName is nil")
-	}
-
+func (r *DockerMachineReconciler) getBootstrapData(ctx context.Context, namespace string, dataSecretName string) (string, bootstrapv1.Format, error) {
 	s := &corev1.Secret{}
-	key := client.ObjectKey{Namespace: machine.GetNamespace(), Name: *machine.Spec.Bootstrap.DataSecretName}
+	key := client.ObjectKey{Namespace: namespace, Name: dataSecretName}
 	if err := r.Client.Get(ctx, key, s); err != nil {
-		return "", "", errors.Wrapf(err, "failed to retrieve bootstrap data secret for DockerMachine %s/%s", machine.GetNamespace(), machine.GetName())
+		return "", "", errors.Wrapf(err, "failed to retrieve bootstrap data secret %s", dataSecretName)
 	}
 
 	value, ok := s.Data["value"]
@@ -443,33 +600,54 @@ func (r *DockerMachineReconciler) getBootstrapData(ctx context.Context, machine 
 	}
 
 	format := s.Data["format"]
-	if string(format) == "" {
+	if len(format) == 0 {
 		format = []byte(bootstrapv1.CloudConfig)
 	}
 
 	return base64.StdEncoding.EncodeToString(value), bootstrapv1.Format(format), nil
 }
 
+func (r *DockerMachineReconciler) getUnsafeLoadBalancerConfigTemplate(ctx context.Context, dockerCluster *infrav1.DockerCluster) (string, error) {
+	if dockerCluster.Spec.LoadBalancer.CustomHAProxyConfigTemplateRef == nil {
+		return "", nil
+	}
+	cm := &corev1.ConfigMap{}
+	key := types.NamespacedName{
+		Name:      dockerCluster.Spec.LoadBalancer.CustomHAProxyConfigTemplateRef.Name,
+		Namespace: dockerCluster.Namespace,
+	}
+	if err := r.Get(ctx, key, cm); err != nil {
+		return "", errors.Wrapf(err, "failed to retrieve custom HAProxy configuration ConfigMap %s", key)
+	}
+	template, ok := cm.Data["value"]
+	if !ok {
+		return "", fmt.Errorf("expected key \"value\" to exist in ConfigMap %s", key)
+	}
+	return template, nil
+}
+
 // setMachineAddress gets the address from the container corresponding to a docker node and sets it on the Machine object.
 func setMachineAddress(ctx context.Context, dockerMachine *infrav1.DockerMachine, externalMachine *docker.Machine) error {
-	machineAddress, err := externalMachine.Address(ctx)
+	machineAddresses, err := externalMachine.Address(ctx)
 	if err != nil {
 		return err
 	}
-
-	dockerMachine.Status.Addresses = []clusterv1.MachineAddress{
-		{
-			Type:    clusterv1.MachineHostName,
-			Address: externalMachine.ContainerName(),
-		},
-		{
-			Type:    clusterv1.MachineInternalIP,
-			Address: machineAddress,
-		},
-		{
-			Type:    clusterv1.MachineExternalIP,
-			Address: machineAddress,
-		},
+	dockerMachine.Status.Addresses = []clusterv1.MachineAddress{{
+		Type:    clusterv1.MachineHostName,
+		Address: externalMachine.ContainerName()},
 	}
+
+	for _, addr := range machineAddresses {
+		dockerMachine.Status.Addresses = append(dockerMachine.Status.Addresses,
+			clusterv1.MachineAddress{
+				Type:    clusterv1.MachineInternalIP,
+				Address: addr,
+			},
+			clusterv1.MachineAddress{
+				Type:    clusterv1.MachineExternalIP,
+				Address: addr,
+			})
+	}
+
 	return nil
 }

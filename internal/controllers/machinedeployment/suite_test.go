@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	// +kubebuilder:scaffold:imports
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -33,14 +32,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/api/v1beta1/index"
+	"sigs.k8s.io/cluster-api/controllers/clustercache"
 	"sigs.k8s.io/cluster-api/controllers/remote"
+	machinecontroller "sigs.k8s.io/cluster-api/internal/controllers/machine"
 	machinesetcontroller "sigs.k8s.io/cluster-api/internal/controllers/machineset"
 	"sigs.k8s.io/cluster-api/internal/test/envtest"
 )
@@ -69,37 +70,46 @@ func TestMain(m *testing.M) {
 	}
 
 	setupReconcilers := func(ctx context.Context, mgr ctrl.Manager) {
-		// Set up a ClusterCacheTracker and ClusterCacheReconciler to provide to controllers
-		// requiring a connection to a remote cluster
-		log := ctrl.Log.WithName("remote").WithName("ClusterCacheTracker")
-		tracker, err := remote.NewClusterCacheTracker(
-			mgr,
-			remote.ClusterCacheTrackerOptions{
-				Log:     &log,
-				Indexes: remote.DefaultIndexes,
+		clusterCache, err := clustercache.SetupWithManager(ctx, mgr, clustercache.Options{
+			SecretClient: mgr.GetClient(),
+			Cache: clustercache.CacheOptions{
+				Indexes: []clustercache.CacheOptionsIndex{clustercache.NodeProviderIDIndex},
 			},
-		)
+			Client: clustercache.ClientOptions{
+				UserAgent: remote.DefaultClusterAPIUserAgent("test-controller-manager"),
+				Cache: clustercache.ClientCacheOptions{
+					DisableFor: []client.Object{
+						// Don't cache ConfigMaps & Secrets.
+						&corev1.ConfigMap{},
+						&corev1.Secret{},
+					},
+				},
+			},
+		}, controller.Options{MaxConcurrentReconciles: 10})
 		if err != nil {
-			panic(fmt.Sprintf("unable to create cluster cache tracker: %v", err))
+			panic(fmt.Sprintf("Failed to create ClusterCache: %v", err))
 		}
-		if err := (&remote.ClusterCacheReconciler{
-			Client:  mgr.GetClient(),
-			Tracker: tracker,
+
+		if err := (&machinecontroller.Reconciler{
+			Client:                      mgr.GetClient(),
+			APIReader:                   mgr.GetAPIReader(),
+			ClusterCache:                clusterCache,
+			RemoteConditionsGracePeriod: 5 * time.Minute,
 		}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: 1}); err != nil {
-			panic(fmt.Sprintf("Failed to start ClusterCacheReconciler: %v", err))
+			panic(fmt.Sprintf("Failed to start MachineReconciler: %v", err))
 		}
 		if err := (&machinesetcontroller.Reconciler{
-			Client:    mgr.GetClient(),
-			APIReader: mgr.GetAPIReader(),
-			Tracker:   tracker,
+			Client:       mgr.GetClient(),
+			APIReader:    mgr.GetAPIReader(),
+			ClusterCache: clusterCache,
 		}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: 1}); err != nil {
-			panic(fmt.Sprintf("Failed to start MMachineSetReconciler: %v", err))
+			panic(fmt.Sprintf("Failed to start MachineSetReconciler: %v", err))
 		}
 		if err := (&Reconciler{
 			Client:    mgr.GetClient(),
 			APIReader: mgr.GetAPIReader(),
 		}).SetupWithManager(ctx, mgr, controller.Options{MaxConcurrentReconciles: 1}); err != nil {
-			panic(fmt.Sprintf("Failed to start MMachineDeploymentReconciler: %v", err))
+			panic(fmt.Sprintf("Failed to start MachineDeploymentReconciler: %v", err))
 		}
 	}
 
@@ -170,13 +180,13 @@ func fakeMachineNodeRef(m *clusterv1.Machine, pid string, g *WithT) {
 
 	// Patch the Machine.
 	patchMachine := client.MergeFrom(m.DeepCopy())
-	m.Spec.ProviderID = pointer.StringPtr(pid)
+	m.Spec.ProviderID = ptr.To(pid)
 	g.Expect(env.Patch(ctx, m, patchMachine)).To(Succeed())
 
 	patchMachine = client.MergeFrom(m.DeepCopy())
 	m.Status.NodeRef = &corev1.ObjectReference{
-		APIVersion: node.APIVersion,
-		Kind:       node.Kind,
+		APIVersion: corev1.SchemeGroupVersion.String(),
+		Kind:       "Node",
 		Name:       node.Name,
 	}
 	g.Expect(env.Status().Patch(ctx, m, patchMachine)).To(Succeed())

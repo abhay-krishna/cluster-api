@@ -17,6 +17,7 @@ limitations under the License.
 package config
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -34,11 +35,11 @@ func Test_viperReader_Init(t *testing.T) {
 	// Change HOME dir and do not specify config file
 	// (.cluster-api/clusterctl) in it.
 	clusterctlHomeDir, err := os.MkdirTemp("", "clusterctl-default")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	defer os.RemoveAll(clusterctlHomeDir)
 
 	dir, err := os.MkdirTemp("", "clusterctl")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	defer os.RemoveAll(dir)
 
 	configFile := filepath.Join(dir, "clusterctl.yaml")
@@ -48,15 +49,15 @@ func Test_viperReader_Init(t *testing.T) {
 	g.Expect(os.WriteFile(configFileBadContents, []byte("bad-contents"), 0600)).To(Succeed())
 
 	// To test the remote config file
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, err := w.Write([]byte("bar: bar"))
-		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(err).ToNot(HaveOccurred())
 	}))
 	defer ts.Close()
 
 	// To test the remote config file when fails to fetch
-	tsFail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tsFail := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer tsFail.Close()
@@ -108,12 +109,15 @@ func Test_viperReader_Init(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gg := NewWithT(t)
-			v := newViperReader(injectConfigPaths(tt.configDirs))
+
+			ctx := context.Background()
+
+			v, _ := newViperReader(injectConfigPaths(tt.configDirs))
 			if tt.expectErr {
-				gg.Expect(v.Init(tt.configPath)).ToNot(Succeed())
+				gg.Expect(v.Init(ctx, tt.configPath)).ToNot(Succeed())
 				return
 			}
-			gg.Expect(v.Init(tt.configPath)).To(Succeed())
+			gg.Expect(v.Init(ctx, tt.configPath)).To(Succeed())
 		})
 	}
 }
@@ -121,11 +125,9 @@ func Test_viperReader_Init(t *testing.T) {
 func Test_viperReader_Get(t *testing.T) {
 	g := NewWithT(t)
 
-	dir, err := os.MkdirTemp("", "clusterctl")
-	g.Expect(err).NotTo(HaveOccurred())
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
-	_ = os.Setenv("FOO", "foo")
+	t.Setenv("FOO", "foo")
 
 	configFile := filepath.Join(dir, "clusterctl.yaml")
 	g.Expect(os.WriteFile(configFile, []byte("bar: bar"), 0600)).To(Succeed())
@@ -168,9 +170,11 @@ func Test_viperReader_Get(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gs := NewWithT(t)
 
-			v := newViperReader(injectConfigPaths([]string{dir}))
+			ctx := context.Background()
 
-			gs.Expect(v.Init(configFile)).To(Succeed())
+			v, _ := newViperReader(injectConfigPaths([]string{dir}))
+
+			gs.Expect(v.Init(ctx, configFile)).To(Succeed())
 
 			got, err := v.Get(tt.args.key)
 			if tt.wantErr {
@@ -178,7 +182,7 @@ func Test_viperReader_Get(t *testing.T) {
 				return
 			}
 
-			gs.Expect(err).NotTo(HaveOccurred())
+			gs.Expect(err).ToNot(HaveOccurred())
 			gs.Expect(got).To(Equal(tt.want))
 		})
 	}
@@ -186,28 +190,28 @@ func Test_viperReader_Get(t *testing.T) {
 
 func Test_viperReader_GetWithoutDefaultConfig(t *testing.T) {
 	g := NewWithT(t)
-	dir, err := os.MkdirTemp("", "clusterctl")
-	g.Expect(err).NotTo(HaveOccurred())
-	defer os.RemoveAll(dir)
 
-	_ = os.Setenv("FOO_FOO", "bar")
+	ctx := context.Background()
 
-	v := newViperReader(injectConfigPaths([]string{dir}))
-	g.Expect(v.Init("")).To(Succeed())
+	dir := t.TempDir()
+
+	t.Setenv("FOO_FOO", "bar")
+
+	v, err := newViperReader(injectConfigPaths([]string{dir}))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(v.Init(ctx, "")).To(Succeed())
 
 	got, err := v.Get("FOO_FOO")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(got).To(Equal("bar"))
 }
 
 func Test_viperReader_Set(t *testing.T) {
 	g := NewWithT(t)
 
-	dir, err := os.MkdirTemp("", "clusterctl")
-	g.Expect(err).NotTo(HaveOccurred())
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
-	_ = os.Setenv("FOO", "foo")
+	t.Setenv("FOO", "foo")
 
 	configFile := filepath.Join(dir, "clusterctl.yaml")
 
@@ -235,14 +239,16 @@ func Test_viperReader_Set(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gs := NewWithT(t)
 
+			ctx := context.Background()
+
 			v := &viperReader{}
 
-			gs.Expect(v.Init(configFile)).To(Succeed())
+			gs.Expect(v.Init(ctx, configFile)).To(Succeed())
 
 			v.Set(tt.args.key, tt.args.value)
 
 			got, err := v.Get(tt.args.key)
-			gs.Expect(err).NotTo(HaveOccurred())
+			gs.Expect(err).ToNot(HaveOccurred())
 			gs.Expect(got).To(Equal(tt.want))
 		})
 	}
@@ -251,7 +257,7 @@ func Test_viperReader_Set(t *testing.T) {
 func Test_viperReader_checkDefaultConfig(t *testing.T) {
 	g := NewWithT(t)
 	dir, err := os.MkdirTemp("", "clusterctl")
-	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(err).ToNot(HaveOccurred())
 	defer os.RemoveAll(dir)
 	dir = strings.TrimSuffix(dir, "/")
 

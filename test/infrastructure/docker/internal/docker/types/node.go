@@ -18,12 +18,15 @@ limitations under the License.
 package types
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	"sigs.k8s.io/cluster-api/test/infrastructure/container"
 )
@@ -96,10 +99,40 @@ func (n *Node) Delete(ctx context.Context) error {
 
 	err = containerRuntime.DeleteContainer(ctx, n.Name)
 	if err != nil {
+		log := ctrl.LoggerFrom(ctx)
+
+		// Use our own context, so we are able to get debug information even
+		// when the context used in the layers above is already timed out.
+		debugCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		var buffer bytes.Buffer
+		err = containerRuntime.ContainerDebugInfo(debugCtx, n.Name, &buffer)
+		if err != nil {
+			log.Error(err, "Failed to get logs from the machine container")
+		} else {
+			log.Info("Got logs from the machine container", "output", strings.ReplaceAll(buffer.String(), "\\n", "\n"))
+		}
+
 		return errors.Wrapf(err, "failed to delete container %q", n.Name)
 	}
 
 	return nil
+}
+
+// ReadFile reads a file from a running container.
+func (n *Node) ReadFile(ctx context.Context, dest string) ([]byte, error) {
+	command := n.Commander.Command("cp", dest, "/dev/stdout")
+	stdout := bytes.Buffer{}
+
+	command.SetStdout(&stdout)
+	// Also set stderr so it does not pollute stdout.
+	command.SetStderr(&bytes.Buffer{})
+
+	if err := command.Run(ctx); err != nil {
+		return nil, errors.Wrapf(err, "failed to read file %s", dest)
+	}
+	return stdout.Bytes(), nil
 }
 
 // WriteFile puts a file inside a running container.

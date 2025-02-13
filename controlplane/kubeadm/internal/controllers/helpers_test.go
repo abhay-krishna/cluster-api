@@ -17,14 +17,18 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
+	gomegatypes "github.com/onsi/gomega/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -72,11 +76,17 @@ func TestReconcileKubeconfigEmptyAPIEndpoints(t *testing.T) {
 
 	fakeClient := newFakeClient(kcp.DeepCopy())
 	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
+		Client:              fakeClient,
+		SecretCachingClient: fakeClient,
+		recorder:            record.NewFakeRecorder(32),
 	}
 
-	result, err := r.reconcileKubeconfig(ctx, cluster, kcp)
+	controlPlane := &internal.ControlPlane{
+		KCP:     kcp,
+		Cluster: cluster,
+	}
+
+	result, err := r.reconcileKubeconfig(ctx, controlPlane)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(result).To(BeZero())
 
@@ -121,13 +131,19 @@ func TestReconcileKubeconfigMissingCACertificate(t *testing.T) {
 
 	fakeClient := newFakeClient(kcp.DeepCopy())
 	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
+		Client:              fakeClient,
+		SecretCachingClient: fakeClient,
+		recorder:            record.NewFakeRecorder(32),
 	}
 
-	result, err := r.reconcileKubeconfig(ctx, cluster, kcp)
+	controlPlane := &internal.ControlPlane{
+		KCP:     kcp,
+		Cluster: cluster,
+	}
+
+	result, err := r.reconcileKubeconfig(ctx, controlPlane)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result).To(Equal(ctrl.Result{RequeueAfter: dependentCertRequeueAfter}))
+	g.Expect(result).To(BeComparableTo(ctrl.Result{RequeueAfter: dependentCertRequeueAfter}))
 
 	kubeconfigSecret := &corev1.Secret{}
 	secretName := client.ObjectKey{
@@ -135,75 +151,6 @@ func TestReconcileKubeconfigMissingCACertificate(t *testing.T) {
 		Name:      secret.Name(cluster.Name, secret.Kubeconfig),
 	}
 	g.Expect(r.Client.Get(ctx, secretName, kubeconfigSecret)).To(MatchError(ContainSubstring("not found")))
-}
-
-func TestReconcileKubeconfigSecretAdoptsV1alpha2Secrets(t *testing.T) {
-	g := NewWithT(t)
-
-	cluster := &clusterv1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
-			APIVersion: clusterv1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo",
-			Namespace: metav1.NamespaceDefault,
-		},
-		Spec: clusterv1.ClusterSpec{
-			ControlPlaneEndpoint: clusterv1.APIEndpoint{Host: "test.local", Port: 8443},
-		},
-	}
-
-	kcp := &controlplanev1.KubeadmControlPlane{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "KubeadmControlPlane",
-			APIVersion: controlplanev1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo",
-			Namespace: metav1.NamespaceDefault,
-		},
-		Spec: controlplanev1.KubeadmControlPlaneSpec{
-			Version: "v1.16.6",
-		},
-	}
-
-	existingKubeconfigSecret := kubeconfig.GenerateSecretWithOwner(
-		client.ObjectKey{Name: "foo", Namespace: metav1.NamespaceDefault},
-		[]byte{},
-		metav1.OwnerReference{
-			APIVersion: clusterv1.GroupVersion.String(),
-			Kind:       "Cluster",
-			Name:       cluster.Name,
-			UID:        cluster.UID,
-		}, // the Cluster ownership defines v1alpha2 controlled secrets
-	)
-
-	fakeClient := newFakeClient(kcp.DeepCopy(), existingKubeconfigSecret.DeepCopy())
-	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
-	}
-
-	result, err := r.reconcileKubeconfig(ctx, cluster, kcp)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result).To(Equal(ctrl.Result{}))
-
-	kubeconfigSecret := &corev1.Secret{}
-	secretName := client.ObjectKey{
-		Namespace: metav1.NamespaceDefault,
-		Name:      secret.Name(cluster.Name, secret.Kubeconfig),
-	}
-	g.Expect(r.Client.Get(ctx, secretName, kubeconfigSecret)).To(Succeed())
-	g.Expect(kubeconfigSecret.Labels).To(Equal(existingKubeconfigSecret.Labels))
-	g.Expect(kubeconfigSecret.Data).To(Equal(existingKubeconfigSecret.Data))
-	g.Expect(kubeconfigSecret.OwnerReferences).ToNot(ContainElement(metav1.OwnerReference{
-		APIVersion: clusterv1.GroupVersion.String(),
-		Kind:       "Cluster",
-		Name:       cluster.Name,
-		UID:        cluster.UID,
-	}))
-	g.Expect(kubeconfigSecret.OwnerReferences).To(ContainElement(*metav1.NewControllerRef(kcp, controlplanev1.GroupVersion.WithKind("KubeadmControlPlane"))))
 }
 
 func TestReconcileKubeconfigSecretDoesNotAdoptsUserSecrets(t *testing.T) {
@@ -237,19 +184,36 @@ func TestReconcileKubeconfigSecretDoesNotAdoptsUserSecrets(t *testing.T) {
 		},
 	}
 
-	existingKubeconfigSecret := kubeconfig.GenerateSecretWithOwner(
-		client.ObjectKey{Name: "foo", Namespace: metav1.NamespaceDefault},
-		[]byte{},
-		metav1.OwnerReference{}, // user defined secrets are not owned by the cluster.
-	)
+	existingKubeconfigSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secret.Name("foo", secret.Kubeconfig),
+			Namespace: metav1.NamespaceDefault,
+			Labels: map[string]string{
+				clusterv1.ClusterNameLabel: "foo",
+			},
+			OwnerReferences: []metav1.OwnerReference{},
+		},
+		Data: map[string][]byte{
+			secret.KubeconfigDataName: {},
+		},
+		// KCP identifies CAPI-created Secrets using the clusterv1.ClusterSecretType. Setting any other type allows
+		// the controllers to treat it as a user-provided Secret.
+		Type: corev1.SecretTypeOpaque,
+	}
 
 	fakeClient := newFakeClient(kcp.DeepCopy(), existingKubeconfigSecret.DeepCopy())
 	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
+		Client:              fakeClient,
+		SecretCachingClient: fakeClient,
+		recorder:            record.NewFakeRecorder(32),
 	}
 
-	result, err := r.reconcileKubeconfig(ctx, cluster, kcp)
+	controlPlane := &internal.ControlPlane{
+		KCP:     kcp,
+		Cluster: cluster,
+	}
+
+	result, err := r.reconcileKubeconfig(ctx, controlPlane)
 	g.Expect(err).To(Succeed())
 	g.Expect(result).To(BeZero())
 
@@ -305,12 +269,19 @@ func TestKubeadmControlPlaneReconciler_reconcileKubeconfig(t *testing.T) {
 
 	fakeClient := newFakeClient(kcp.DeepCopy(), existingCACertSecret.DeepCopy())
 	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
+		Client:              fakeClient,
+		SecretCachingClient: fakeClient,
+		recorder:            record.NewFakeRecorder(32),
 	}
-	result, err := r.reconcileKubeconfig(ctx, cluster, kcp)
+
+	controlPlane := &internal.ControlPlane{
+		KCP:     kcp,
+		Cluster: cluster,
+	}
+
+	result, err := r.reconcileKubeconfig(ctx, controlPlane)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result).To(Equal(ctrl.Result{}))
+	g.Expect(result).To(BeComparableTo(ctrl.Result{}))
 
 	kubeconfigSecret := &corev1.Secret{}
 	secretName := client.ObjectKey{
@@ -320,23 +291,42 @@ func TestKubeadmControlPlaneReconciler_reconcileKubeconfig(t *testing.T) {
 	g.Expect(r.Client.Get(ctx, secretName, kubeconfigSecret)).To(Succeed())
 	g.Expect(kubeconfigSecret.OwnerReferences).NotTo(BeEmpty())
 	g.Expect(kubeconfigSecret.OwnerReferences).To(ContainElement(*metav1.NewControllerRef(kcp, controlplanev1.GroupVersion.WithKind("KubeadmControlPlane"))))
-	g.Expect(kubeconfigSecret.Labels).To(HaveKeyWithValue(clusterv1.ClusterLabelName, cluster.Name))
+	g.Expect(kubeconfigSecret.Labels).To(HaveKeyWithValue(clusterv1.ClusterNameLabel, cluster.Name))
 }
 
 func TestCloneConfigsAndGenerateMachine(t *testing.T) {
+	setup := func(t *testing.T, g *WithT) *corev1.Namespace {
+		t.Helper()
+
+		t.Log("Creating the namespace")
+		ns, err := env.CreateNamespace(ctx, "test-applykubeadmconfig")
+		g.Expect(err).ToNot(HaveOccurred())
+
+		return ns
+	}
+
+	teardown := func(t *testing.T, g *WithT, ns *corev1.Namespace) {
+		t.Helper()
+
+		t.Log("Deleting the namespace")
+		g.Expect(env.Delete(ctx, ns)).To(Succeed())
+	}
+
 	g := NewWithT(t)
+	namespace := setup(t, g)
+	defer teardown(t, g, namespace)
 
 	cluster := &clusterv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
-			Namespace: metav1.NamespaceDefault,
+			Namespace: namespace.Name,
 		},
 	}
 
-	genericMachineTemplate := &unstructured.Unstructured{
+	genericInfrastructureMachineTemplate := &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"kind":       "GenericMachineTemplate",
-			"apiVersion": "generic.io/v1",
+			"kind":       "GenericInfrastructureMachineTemplate",
+			"apiVersion": "infrastructure.cluster.x-k8s.io/v1beta1",
 			"metadata": map[string]interface{}{
 				"name":      "infra-foo",
 				"namespace": cluster.Namespace,
@@ -350,58 +340,65 @@ func TestCloneConfigsAndGenerateMachine(t *testing.T) {
 			},
 		},
 	}
+	g.Expect(env.CreateAndWait(ctx, genericInfrastructureMachineTemplate)).To(Succeed())
 
+	namingTemplateKey := "-testkcp"
 	kcp := &controlplanev1.KubeadmControlPlane{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "kcp-foo",
 			Namespace: cluster.Namespace,
+			UID:       "abc-123-kcp-control-plane",
 		},
 		Spec: controlplanev1.KubeadmControlPlaneSpec{
 			MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
 				InfrastructureRef: corev1.ObjectReference{
-					Kind:       genericMachineTemplate.GetKind(),
-					APIVersion: genericMachineTemplate.GetAPIVersion(),
-					Name:       genericMachineTemplate.GetName(),
+					Kind:       genericInfrastructureMachineTemplate.GetKind(),
+					APIVersion: genericInfrastructureMachineTemplate.GetAPIVersion(),
+					Name:       genericInfrastructureMachineTemplate.GetName(),
 					Namespace:  cluster.Namespace,
 				},
 			},
 			Version: "v1.16.6",
+			MachineNamingStrategy: &controlplanev1.MachineNamingStrategy{
+				Template: "{{ .kubeadmControlPlane.name }}" + namingTemplateKey + "-{{ .random }}",
+			},
 		},
 	}
 
-	fakeClient := newFakeClient(cluster.DeepCopy(), kcp.DeepCopy(), genericMachineTemplate.DeepCopy())
-
 	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
+		Client:              env,
+		SecretCachingClient: secretCachingClient,
+		recorder:            record.NewFakeRecorder(32),
 	}
 
 	bootstrapSpec := &bootstrapv1.KubeadmConfigSpec{
 		JoinConfiguration: &bootstrapv1.JoinConfiguration{},
 	}
-	g.Expect(r.cloneConfigsAndGenerateMachine(ctx, cluster, kcp, bootstrapSpec, nil)).To(Succeed())
+	_, err := r.cloneConfigsAndGenerateMachine(ctx, cluster, kcp, bootstrapSpec, nil)
+	g.Expect(err).To(Succeed())
 
 	machineList := &clusterv1.MachineList{}
-	g.Expect(fakeClient.List(ctx, machineList, client.InNamespace(cluster.Namespace))).To(Succeed())
+	g.Expect(env.GetAPIReader().List(ctx, machineList, client.InNamespace(cluster.Namespace))).To(Succeed())
 	g.Expect(machineList.Items).To(HaveLen(1))
 
-	for _, m := range machineList.Items {
+	for i := range machineList.Items {
+		m := machineList.Items[i]
 		g.Expect(m.Namespace).To(Equal(cluster.Namespace))
 		g.Expect(m.Name).NotTo(BeEmpty())
-		g.Expect(m.Name).To(HavePrefix(kcp.Name))
+		g.Expect(m.Name).To(HavePrefix(kcp.Name + namingTemplateKey))
 
-		infraObj, err := external.Get(ctx, r.Client, &m.Spec.InfrastructureRef, m.Spec.InfrastructureRef.Namespace)
-		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(infraObj.GetAnnotations()).To(HaveKeyWithValue(clusterv1.TemplateClonedFromNameAnnotation, genericMachineTemplate.GetName()))
-		g.Expect(infraObj.GetAnnotations()).To(HaveKeyWithValue(clusterv1.TemplateClonedFromGroupKindAnnotation, genericMachineTemplate.GroupVersionKind().GroupKind().String()))
+		infraObj, err := external.Get(ctx, r.Client, &m.Spec.InfrastructureRef)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(infraObj.GetAnnotations()).To(HaveKeyWithValue(clusterv1.TemplateClonedFromNameAnnotation, genericInfrastructureMachineTemplate.GetName()))
+		g.Expect(infraObj.GetAnnotations()).To(HaveKeyWithValue(clusterv1.TemplateClonedFromGroupKindAnnotation, genericInfrastructureMachineTemplate.GroupVersionKind().GroupKind().String()))
 
 		g.Expect(m.Spec.InfrastructureRef.Namespace).To(Equal(cluster.Namespace))
-		g.Expect(m.Spec.InfrastructureRef.Name).To(HavePrefix(genericMachineTemplate.GetName()))
-		g.Expect(m.Spec.InfrastructureRef.APIVersion).To(Equal(genericMachineTemplate.GetAPIVersion()))
-		g.Expect(m.Spec.InfrastructureRef.Kind).To(Equal("GenericMachine"))
+		g.Expect(m.Spec.InfrastructureRef.Name).To(Equal(m.Name))
+		g.Expect(m.Spec.InfrastructureRef.APIVersion).To(Equal(genericInfrastructureMachineTemplate.GetAPIVersion()))
+		g.Expect(m.Spec.InfrastructureRef.Kind).To(Equal("GenericInfrastructureMachine"))
 
 		g.Expect(m.Spec.Bootstrap.ConfigRef.Namespace).To(Equal(cluster.Namespace))
-		g.Expect(m.Spec.Bootstrap.ConfigRef.Name).To(HavePrefix(kcp.Name))
+		g.Expect(m.Spec.Bootstrap.ConfigRef.Name).To(Equal(m.Name))
 		g.Expect(m.Spec.Bootstrap.ConfigRef.APIVersion).To(Equal(bootstrapv1.GroupVersion.String()))
 		g.Expect(m.Spec.Bootstrap.ConfigRef.Kind).To(Equal("KubeadmConfig"))
 	}
@@ -456,8 +453,9 @@ func TestCloneConfigsAndGenerateMachineFail(t *testing.T) {
 	fakeClient := newFakeClient(cluster.DeepCopy(), kcp.DeepCopy(), genericMachineTemplate.DeepCopy())
 
 	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
+		Client:              fakeClient,
+		SecretCachingClient: fakeClient,
+		recorder:            record.NewFakeRecorder(32),
 	}
 
 	bootstrapSpec := &bootstrapv1.KubeadmConfigSpec{
@@ -466,27 +464,30 @@ func TestCloneConfigsAndGenerateMachineFail(t *testing.T) {
 
 	// Try to break Infra Cloning
 	kcp.Spec.MachineTemplate.InfrastructureRef.Name = "something_invalid"
-	g.Expect(r.cloneConfigsAndGenerateMachine(ctx, cluster, kcp, bootstrapSpec, nil)).To(HaveOccurred())
+	_, err := r.cloneConfigsAndGenerateMachine(ctx, cluster, kcp, bootstrapSpec, nil)
+	g.Expect(err).To(HaveOccurred())
 	g.Expect(&kcp.GetConditions()[0]).Should(conditions.HaveSameStateOf(&clusterv1.Condition{
 		Type:     controlplanev1.MachinesCreatedCondition,
 		Status:   corev1.ConditionFalse,
 		Severity: clusterv1.ConditionSeverityError,
 		Reason:   controlplanev1.InfrastructureTemplateCloningFailedReason,
-		Message:  "failed to retrieve GenericMachineTemplate external object \"default\"/\"something_invalid\": genericmachinetemplates.generic.io \"something_invalid\" not found",
+		Message:  "failed to retrieve GenericMachineTemplate default/something_invalid: genericmachinetemplates.generic.io \"something_invalid\" not found",
 	}))
 }
 
-func TestKubeadmControlPlaneReconciler_generateMachine(t *testing.T) {
-	g := NewWithT(t)
-	fakeClient := newFakeClient()
+func TestKubeadmControlPlaneReconciler_computeDesiredMachine(t *testing.T) {
+	namingTemplateKey := "-kcp"
+	kcpName := "testControlPlane"
+	clusterName := "testCluster"
 
 	cluster := &clusterv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testCluster",
+			Name:      clusterName,
 			Namespace: metav1.NamespaceDefault,
 		},
 	}
-
+	duration5s := &metav1.Duration{Duration: 5 * time.Second}
+	duration10s := &metav1.Duration{Duration: 10 * time.Second}
 	kcpMachineTemplateObjectMeta := clusterv1.ObjectMeta{
 		Labels: map[string]string{
 			"machineTemplateLabel": "machineTemplateLabelValue",
@@ -495,18 +496,9 @@ func TestKubeadmControlPlaneReconciler_generateMachine(t *testing.T) {
 			"machineTemplateAnnotation": "machineTemplateAnnotationValue",
 		},
 	}
-	kcp := &controlplanev1.KubeadmControlPlane{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testControlPlane",
-			Namespace: cluster.Namespace,
-		},
-		Spec: controlplanev1.KubeadmControlPlaneSpec{
-			Version: "v1.16.6",
-			MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
-				ObjectMeta: kcpMachineTemplateObjectMeta,
-			},
-		},
-	}
+	kcpMachineTemplateObjectMetaCopy := kcpMachineTemplateObjectMeta.DeepCopy()
+
+	clusterConfigurationString := "{\"etcd\":{},\"networking\":{},\"apiServer\":{},\"controllerManager\":{},\"scheduler\":{},\"dns\":{},\"clusterName\":\"testCluster\"}"
 
 	infraRef := &corev1.ObjectReference{
 		Kind:       "InfraKind",
@@ -520,43 +512,324 @@ func TestKubeadmControlPlaneReconciler_generateMachine(t *testing.T) {
 		Name:       "bootstrap",
 		Namespace:  cluster.Namespace,
 	}
-	expectedMachineSpec := clusterv1.MachineSpec{
-		ClusterName: cluster.Name,
-		Version:     utilpointer.StringPtr(kcp.Spec.Version),
-		Bootstrap: clusterv1.Bootstrap{
-			ConfigRef: bootstrapRef.DeepCopy(),
+
+	tests := []struct {
+		name                      string
+		kcp                       *controlplanev1.KubeadmControlPlane
+		isUpdatingExistingMachine bool
+		want                      []gomegatypes.GomegaMatcher
+		wantErr                   bool
+	}{
+		{
+			name: "should return the correct Machine object when creating a new Machine",
+			kcp: &controlplanev1.KubeadmControlPlane{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kcpName,
+					Namespace: cluster.Namespace,
+				},
+				Spec: controlplanev1.KubeadmControlPlaneSpec{
+					Version: "v1.16.6",
+					MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
+						ObjectMeta:              kcpMachineTemplateObjectMeta,
+						NodeDrainTimeout:        duration5s,
+						NodeDeletionTimeout:     duration5s,
+						NodeVolumeDetachTimeout: duration5s,
+					},
+					KubeadmConfigSpec: bootstrapv1.KubeadmConfigSpec{
+						ClusterConfiguration: &bootstrapv1.ClusterConfiguration{
+							ClusterName: clusterName,
+						},
+					},
+					MachineNamingStrategy: &controlplanev1.MachineNamingStrategy{
+						Template: "{{ .kubeadmControlPlane.name }}" + namingTemplateKey + "-{{ .random }}",
+					},
+				},
+			},
+			isUpdatingExistingMachine: false,
+			want: []gomegatypes.GomegaMatcher{
+				HavePrefix(kcpName + namingTemplateKey),
+				Not(HaveSuffix("00000")),
+			},
+			wantErr: false,
 		},
-		InfrastructureRef: *infraRef.DeepCopy(),
+		{
+			name: "should return error when creating a new Machine when '.random' is not added in template",
+			kcp: &controlplanev1.KubeadmControlPlane{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kcpName,
+					Namespace: cluster.Namespace,
+				},
+				Spec: controlplanev1.KubeadmControlPlaneSpec{
+					Version: "v1.16.6",
+					MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
+						ObjectMeta:              kcpMachineTemplateObjectMeta,
+						NodeDrainTimeout:        duration5s,
+						NodeDeletionTimeout:     duration5s,
+						NodeVolumeDetachTimeout: duration5s,
+					},
+					KubeadmConfigSpec: bootstrapv1.KubeadmConfigSpec{
+						ClusterConfiguration: &bootstrapv1.ClusterConfiguration{
+							ClusterName: clusterName,
+						},
+					},
+					MachineNamingStrategy: &controlplanev1.MachineNamingStrategy{
+						Template: "{{ .kubeadmControlPlane.name }}" + namingTemplateKey,
+					},
+				},
+			},
+			isUpdatingExistingMachine: false,
+			wantErr:                   true,
+		},
+		{
+			name: "should not return error when creating a new Machine when the generated name exceeds 63",
+			kcp: &controlplanev1.KubeadmControlPlane{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kcpName,
+					Namespace: cluster.Namespace,
+				},
+				Spec: controlplanev1.KubeadmControlPlaneSpec{
+					Version: "v1.16.6",
+					MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
+						ObjectMeta:              kcpMachineTemplateObjectMeta,
+						NodeDrainTimeout:        duration5s,
+						NodeDeletionTimeout:     duration5s,
+						NodeVolumeDetachTimeout: duration5s,
+					},
+					KubeadmConfigSpec: bootstrapv1.KubeadmConfigSpec{
+						ClusterConfiguration: &bootstrapv1.ClusterConfiguration{
+							ClusterName: clusterName,
+						},
+					},
+					MachineNamingStrategy: &controlplanev1.MachineNamingStrategy{
+						Template: "{{ .random }}" + fmt.Sprintf("%059d", 0),
+					},
+				},
+			},
+			isUpdatingExistingMachine: false,
+			want: []gomegatypes.GomegaMatcher{
+				ContainSubstring(fmt.Sprintf("%053d", 0)),
+				Not(HaveSuffix("00000")),
+			},
+			wantErr: false,
+		},
+		{
+			name: "should return error when creating a new Machine",
+			kcp: &controlplanev1.KubeadmControlPlane{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kcpName,
+					Namespace: cluster.Namespace,
+				},
+				Spec: controlplanev1.KubeadmControlPlaneSpec{
+					Version: "v1.16.6",
+					MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
+						ObjectMeta:              kcpMachineTemplateObjectMeta,
+						NodeDrainTimeout:        duration5s,
+						NodeDeletionTimeout:     duration5s,
+						NodeVolumeDetachTimeout: duration5s,
+					},
+					KubeadmConfigSpec: bootstrapv1.KubeadmConfigSpec{
+						ClusterConfiguration: &bootstrapv1.ClusterConfiguration{
+							ClusterName: clusterName,
+						},
+					},
+					MachineNamingStrategy: &controlplanev1.MachineNamingStrategy{
+						Template: "some-hardcoded-name-{{ .doesnotexistindata }}-{{ .random }}", // invalid template
+					},
+				},
+			},
+			isUpdatingExistingMachine: false,
+			wantErr:                   true,
+		},
+		{
+			name: "should return the correct Machine object when creating a new Machine with default templated name",
+			kcp: &controlplanev1.KubeadmControlPlane{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kcpName,
+					Namespace: cluster.Namespace,
+				},
+				Spec: controlplanev1.KubeadmControlPlaneSpec{
+					Version: "v1.16.6",
+					MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
+						ObjectMeta:              kcpMachineTemplateObjectMeta,
+						NodeDrainTimeout:        duration5s,
+						NodeDeletionTimeout:     duration5s,
+						NodeVolumeDetachTimeout: duration5s,
+					},
+					KubeadmConfigSpec: bootstrapv1.KubeadmConfigSpec{
+						ClusterConfiguration: &bootstrapv1.ClusterConfiguration{
+							ClusterName: clusterName,
+						},
+					},
+				},
+			},
+			isUpdatingExistingMachine: false,
+			wantErr:                   false,
+			want: []gomegatypes.GomegaMatcher{
+				HavePrefix(kcpName),
+				Not(HaveSuffix("00000")),
+			},
+		},
+		{
+			name: "should return the correct Machine object when updating an existing Machine",
+			kcp: &controlplanev1.KubeadmControlPlane{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kcpName,
+					Namespace: cluster.Namespace,
+				},
+				Spec: controlplanev1.KubeadmControlPlaneSpec{
+					Version: "v1.16.6",
+					MachineTemplate: controlplanev1.KubeadmControlPlaneMachineTemplate{
+						ObjectMeta:              kcpMachineTemplateObjectMeta,
+						NodeDrainTimeout:        duration5s,
+						NodeDeletionTimeout:     duration5s,
+						NodeVolumeDetachTimeout: duration5s,
+					},
+					KubeadmConfigSpec: bootstrapv1.KubeadmConfigSpec{
+						ClusterConfiguration: &bootstrapv1.ClusterConfiguration{
+							ClusterName: clusterName,
+						},
+					},
+					MachineNamingStrategy: &controlplanev1.MachineNamingStrategy{
+						Template: "{{ .kubeadmControlPlane.name }}" + namingTemplateKey + "-{{ .random }}",
+					},
+				},
+			},
+			isUpdatingExistingMachine: true,
+			wantErr:                   false,
+		},
 	}
-	r := &KubeadmControlPlaneReconciler{
-		Client:            fakeClient,
-		managementCluster: &internal.Management{Client: fakeClient},
-		recorder:          record.NewFakeRecorder(32),
-	}
-	g.Expect(r.generateMachine(ctx, kcp, cluster, infraRef, bootstrapRef, nil)).To(Succeed())
 
-	machineList := &clusterv1.MachineList{}
-	g.Expect(fakeClient.List(ctx, machineList, client.InNamespace(cluster.Namespace))).To(Succeed())
-	g.Expect(machineList.Items).To(HaveLen(1))
-	machine := machineList.Items[0]
-	g.Expect(machine.Name).To(HavePrefix(kcp.Name))
-	g.Expect(machine.Namespace).To(Equal(kcp.Namespace))
-	g.Expect(machine.OwnerReferences).To(HaveLen(1))
-	g.Expect(machine.OwnerReferences).To(ContainElement(*metav1.NewControllerRef(kcp, controlplanev1.GroupVersion.WithKind("KubeadmControlPlane"))))
-	g.Expect(machine.Spec).To(Equal(expectedMachineSpec))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	// Verify that the machineTemplate.ObjectMeta has been propagated to the Machine.
-	for k, v := range kcpMachineTemplateObjectMeta.Labels {
-		g.Expect(machine.Labels[k]).To(Equal(v))
-	}
-	for k, v := range kcpMachineTemplateObjectMeta.Annotations {
-		g.Expect(machine.Annotations[k]).To(Equal(v))
-	}
+			var desiredMachine *clusterv1.Machine
+			failureDomain := ptr.To("fd-1")
+			var expectedMachineSpec clusterv1.MachineSpec
+			var err error
 
-	// Verify that machineTemplate.ObjectMeta in KCP has not been modified.
-	g.Expect(kcp.Spec.MachineTemplate.ObjectMeta.Labels).NotTo(HaveKey(clusterv1.ClusterLabelName))
-	g.Expect(kcp.Spec.MachineTemplate.ObjectMeta.Labels).NotTo(HaveKey(clusterv1.MachineControlPlaneLabelName))
-	g.Expect(kcp.Spec.MachineTemplate.ObjectMeta.Annotations).NotTo(HaveKey(controlplanev1.KubeadmClusterConfigurationAnnotation))
+			if tt.isUpdatingExistingMachine {
+				machineName := "existing-machine"
+				machineUID := types.UID("abc-123-existing-machine")
+				// Use different ClusterConfiguration string than the information present in KCP
+				// to verify that for an existing machine we do not override this information.
+				existingClusterConfigurationString := "existing-cluster-configuration-information"
+				remediationData := "remediation-data"
+				machineVersion := ptr.To("v1.25.3")
+				existingMachine := &clusterv1.Machine{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: machineName,
+						UID:  machineUID,
+						Annotations: map[string]string{
+							controlplanev1.KubeadmClusterConfigurationAnnotation: existingClusterConfigurationString,
+							controlplanev1.RemediationForAnnotation:              remediationData,
+						},
+					},
+					Spec: clusterv1.MachineSpec{
+						Version:                 machineVersion,
+						FailureDomain:           failureDomain,
+						NodeDrainTimeout:        duration10s,
+						NodeDeletionTimeout:     duration10s,
+						NodeVolumeDetachTimeout: duration10s,
+						Bootstrap: clusterv1.Bootstrap{
+							ConfigRef: bootstrapRef,
+						},
+						InfrastructureRef: *infraRef,
+						ReadinessGates:    []clusterv1.MachineReadinessGate{{ConditionType: "Foo"}},
+					},
+				}
+				desiredMachine, err = (&KubeadmControlPlaneReconciler{}).computeDesiredMachine(
+					tt.kcp, cluster,
+					existingMachine.Spec.FailureDomain, existingMachine,
+				)
+				if tt.wantErr {
+					g.Expect(err).To(HaveOccurred())
+					return
+				}
+				g.Expect(err).ToNot(HaveOccurred())
+				expectedMachineSpec = clusterv1.MachineSpec{
+					ClusterName: cluster.Name,
+					Version:     machineVersion, // Should use the Machine version and not the version from KCP.
+					Bootstrap: clusterv1.Bootstrap{
+						ConfigRef: bootstrapRef,
+					},
+					InfrastructureRef:       *infraRef,
+					FailureDomain:           failureDomain,
+					NodeDrainTimeout:        tt.kcp.Spec.MachineTemplate.NodeDrainTimeout,
+					NodeDeletionTimeout:     tt.kcp.Spec.MachineTemplate.NodeDeletionTimeout,
+					NodeVolumeDetachTimeout: tt.kcp.Spec.MachineTemplate.NodeVolumeDetachTimeout,
+					ReadinessGates:          append([]clusterv1.MachineReadinessGate{{ConditionType: "Foo"}}, mandatoryMachineReadinessGates...),
+				}
+
+				// Verify the Name and UID of the Machine remain unchanged
+				g.Expect(desiredMachine.Name).To(Equal(machineName))
+				g.Expect(desiredMachine.UID).To(Equal(machineUID))
+				// Verify annotations.
+				expectedAnnotations := map[string]string{}
+				for k, v := range kcpMachineTemplateObjectMeta.Annotations {
+					expectedAnnotations[k] = v
+				}
+				expectedAnnotations[controlplanev1.KubeadmClusterConfigurationAnnotation] = existingClusterConfigurationString
+				expectedAnnotations[controlplanev1.RemediationForAnnotation] = remediationData
+				// The pre-terminate annotation should always be added
+				expectedAnnotations[controlplanev1.PreTerminateHookCleanupAnnotation] = ""
+				g.Expect(desiredMachine.Annotations).To(Equal(expectedAnnotations))
+			} else {
+				desiredMachine, err = (&KubeadmControlPlaneReconciler{}).computeDesiredMachine(
+					tt.kcp, cluster,
+					failureDomain, nil,
+				)
+				if tt.wantErr {
+					g.Expect(err).To(HaveOccurred())
+					return
+				}
+				g.Expect(err).ToNot(HaveOccurred())
+
+				expectedMachineSpec = clusterv1.MachineSpec{
+					ClusterName:             cluster.Name,
+					Version:                 ptr.To(tt.kcp.Spec.Version),
+					FailureDomain:           failureDomain,
+					NodeDrainTimeout:        tt.kcp.Spec.MachineTemplate.NodeDrainTimeout,
+					NodeDeletionTimeout:     tt.kcp.Spec.MachineTemplate.NodeDeletionTimeout,
+					NodeVolumeDetachTimeout: tt.kcp.Spec.MachineTemplate.NodeVolumeDetachTimeout,
+					ReadinessGates:          mandatoryMachineReadinessGates,
+				}
+				// Verify Name.
+				for _, matcher := range tt.want {
+					g.Expect(desiredMachine.Name).To(matcher)
+				}
+				// Verify annotations.
+				expectedAnnotations := map[string]string{}
+				for k, v := range kcpMachineTemplateObjectMeta.Annotations {
+					expectedAnnotations[k] = v
+				}
+				expectedAnnotations[controlplanev1.KubeadmClusterConfigurationAnnotation] = clusterConfigurationString
+				// The pre-terminate annotation should always be added
+				expectedAnnotations[controlplanev1.PreTerminateHookCleanupAnnotation] = ""
+				g.Expect(desiredMachine.Annotations).To(Equal(expectedAnnotations))
+			}
+
+			g.Expect(desiredMachine.Namespace).To(Equal(tt.kcp.Namespace))
+			g.Expect(desiredMachine.OwnerReferences).To(HaveLen(1))
+			g.Expect(desiredMachine.OwnerReferences).To(ContainElement(*metav1.NewControllerRef(tt.kcp, controlplanev1.GroupVersion.WithKind("KubeadmControlPlane"))))
+			g.Expect(desiredMachine.Spec).To(BeComparableTo(expectedMachineSpec))
+
+			// Verify that the machineTemplate.ObjectMeta has been propagated to the Machine.
+			// Verify labels.
+			expectedLabels := map[string]string{}
+			for k, v := range kcpMachineTemplateObjectMeta.Labels {
+				expectedLabels[k] = v
+			}
+			expectedLabels[clusterv1.ClusterNameLabel] = cluster.Name
+			expectedLabels[clusterv1.MachineControlPlaneLabel] = ""
+			expectedLabels[clusterv1.MachineControlPlaneNameLabel] = tt.kcp.Name
+			g.Expect(desiredMachine.Labels).To(Equal(expectedLabels))
+
+			// Verify that machineTemplate.ObjectMeta in KCP has not been modified.
+			g.Expect(tt.kcp.Spec.MachineTemplate.ObjectMeta.Labels).To(Equal(kcpMachineTemplateObjectMetaCopy.Labels))
+			g.Expect(tt.kcp.Spec.MachineTemplate.ObjectMeta.Annotations).To(Equal(kcpMachineTemplateObjectMetaCopy.Annotations))
+		})
+	}
 }
 
 func TestKubeadmControlPlaneReconciler_generateKubeadmConfig(t *testing.T) {
@@ -587,14 +860,15 @@ func TestKubeadmControlPlaneReconciler_generateKubeadmConfig(t *testing.T) {
 	}
 
 	r := &KubeadmControlPlaneReconciler{
-		Client:   fakeClient,
-		recorder: record.NewFakeRecorder(32),
+		Client:              fakeClient,
+		SecretCachingClient: fakeClient,
+		recorder:            record.NewFakeRecorder(32),
 	}
 
-	got, err := r.generateKubeadmConfig(ctx, kcp, cluster, spec.DeepCopy())
-	g.Expect(err).NotTo(HaveOccurred())
+	got, err := r.generateKubeadmConfig(ctx, kcp, cluster, spec.DeepCopy(), "kubeadmconfig-name")
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(got).NotTo(BeNil())
-	g.Expect(got.Name).To(HavePrefix(kcp.Name))
+	g.Expect(got.Name).To(Equal("kubeadmconfig-name"))
 	g.Expect(got.Namespace).To(Equal(kcp.Namespace))
 	g.Expect(got.Kind).To(Equal(expectedReferenceKind))
 	g.Expect(got.APIVersion).To(Equal(expectedReferenceAPIVersion))
@@ -604,5 +878,103 @@ func TestKubeadmControlPlaneReconciler_generateKubeadmConfig(t *testing.T) {
 	g.Expect(fakeClient.Get(ctx, key, bootstrapConfig)).To(Succeed())
 	g.Expect(bootstrapConfig.OwnerReferences).To(HaveLen(1))
 	g.Expect(bootstrapConfig.OwnerReferences).To(ContainElement(expectedOwner))
-	g.Expect(bootstrapConfig.Spec).To(Equal(spec))
+	g.Expect(bootstrapConfig.Spec).To(BeComparableTo(spec))
+}
+
+func TestKubeadmControlPlaneReconciler_adoptKubeconfigSecret(t *testing.T) {
+	g := NewWithT(t)
+	otherOwner := metav1.OwnerReference{
+		Name:               "testcontroller",
+		UID:                "5",
+		Kind:               "OtherController",
+		APIVersion:         clusterv1.GroupVersion.String(),
+		Controller:         ptr.To(true),
+		BlockOwnerDeletion: ptr.To(true),
+	}
+
+	// A KubeadmConfig secret created by CAPI controllers with no owner references.
+	capiKubeadmConfigSecretNoOwner := kubeconfig.GenerateSecretWithOwner(
+		client.ObjectKey{Name: "test1", Namespace: metav1.NamespaceDefault},
+		[]byte{},
+		metav1.OwnerReference{})
+	capiKubeadmConfigSecretNoOwner.OwnerReferences = []metav1.OwnerReference{}
+
+	// A KubeadmConfig secret created by CAPI controllers with a non-KCP owner reference.
+	capiKubeadmConfigSecretOtherOwner := capiKubeadmConfigSecretNoOwner.DeepCopy()
+	capiKubeadmConfigSecretOtherOwner.OwnerReferences = []metav1.OwnerReference{otherOwner}
+
+	// A user provided KubeadmConfig secret with no owner reference.
+	userProvidedKubeadmConfigSecretNoOwner := kubeconfig.GenerateSecretWithOwner(
+		client.ObjectKey{Name: "test1", Namespace: metav1.NamespaceDefault},
+		[]byte{},
+		metav1.OwnerReference{})
+	userProvidedKubeadmConfigSecretNoOwner.Type = corev1.SecretTypeOpaque
+
+	// A user provided KubeadmConfig with a non-KCP owner reference.
+	userProvidedKubeadmConfigSecretOtherOwner := userProvidedKubeadmConfigSecretNoOwner.DeepCopy()
+	userProvidedKubeadmConfigSecretOtherOwner.OwnerReferences = []metav1.OwnerReference{otherOwner}
+
+	kcp := &controlplanev1.KubeadmControlPlane{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "KubeadmControlPlane",
+			APIVersion: controlplanev1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testControlPlane",
+			Namespace: metav1.NamespaceDefault,
+		},
+	}
+	tests := []struct {
+		name             string
+		configSecret     *corev1.Secret
+		expectedOwnerRef metav1.OwnerReference
+	}{
+		{
+			name:         "add KCP owner reference on kubeconfig secret generated by CAPI",
+			configSecret: capiKubeadmConfigSecretNoOwner,
+			expectedOwnerRef: metav1.OwnerReference{
+				Name:               kcp.Name,
+				UID:                kcp.UID,
+				Kind:               kcp.Kind,
+				APIVersion:         kcp.APIVersion,
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(true),
+			},
+		},
+		{
+			name:         "replace owner reference with KCP on kubeconfig secret generated by CAPI with other owner",
+			configSecret: capiKubeadmConfigSecretOtherOwner,
+			expectedOwnerRef: metav1.OwnerReference{
+				Name:               kcp.Name,
+				UID:                kcp.UID,
+				Kind:               kcp.Kind,
+				APIVersion:         kcp.APIVersion,
+				Controller:         ptr.To(true),
+				BlockOwnerDeletion: ptr.To(true),
+			},
+		},
+		{
+			name:             "don't add ownerReference on kubeconfig secret provided by user",
+			configSecret:     userProvidedKubeadmConfigSecretNoOwner,
+			expectedOwnerRef: metav1.OwnerReference{},
+		},
+		{
+			name:             "don't replace ownerReference on kubeconfig secret provided by user",
+			configSecret:     userProvidedKubeadmConfigSecretOtherOwner,
+			expectedOwnerRef: otherOwner,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			fakeClient := newFakeClient(kcp, tt.configSecret)
+			r := &KubeadmControlPlaneReconciler{
+				Client:              fakeClient,
+				SecretCachingClient: fakeClient,
+			}
+			g.Expect(r.adoptKubeconfigSecret(ctx, tt.configSecret, kcp)).To(Succeed())
+			actualSecret := &corev1.Secret{}
+			g.Expect(fakeClient.Get(ctx, client.ObjectKey{Namespace: tt.configSecret.Namespace, Name: tt.configSecret.Name}, actualSecret)).To(Succeed())
+			g.Expect(actualSecret.GetOwnerReferences()).To(ConsistOf(tt.expectedOwnerRef))
+		})
+	}
 }

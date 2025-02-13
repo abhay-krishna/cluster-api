@@ -82,6 +82,10 @@ type DockerMachinePoolStatus struct {
 	// Conditions defines current service state of the DockerMachinePool.
 	// +optional
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+
+	// InfrastructureMachineKind is the kind of the infrastructure resources behind MachinePool Machines.
+	// +optional
+	InfrastructureMachineKind string `json:"infrastructureMachineKind,omitempty"`
 }
 
 // DockerMachinePoolInstanceStatus contains status information about a DockerMachinePool.
@@ -107,6 +111,9 @@ type DockerMachinePoolInstanceStatus struct {
 
 	// Bootstrapped is true when the kubeadm bootstrapping has been run
 	// against this machine
+	//
+	// Deprecated: This field will be removed in the next apiVersion.
+	// When removing also remove from staticcheck exclude-rules for SA1019 in golangci.yml
 	// +optional
 	Bootstrapped bool `json:"bootstrapped,omitempty"`
 }
@@ -127,13 +134,13 @@ type DockerMachinePool struct {
 }
 
 // GetConditions returns the set of conditions for this object.
-func (c *DockerMachinePool) GetConditions() clusterv1.Conditions {
-	return c.Status.Conditions
+func (d *DockerMachinePool) GetConditions() clusterv1.Conditions {
+	return d.Status.Conditions
 }
 
 // SetConditions sets the conditions on this object.
-func (c *DockerMachinePool) SetConditions(conditions clusterv1.Conditions) {
-	c.Status.Conditions = conditions
+func (d *DockerMachinePool) SetConditions(conditions clusterv1.Conditions) {
+	d.Status.Conditions = conditions
 }
 
 // +kubebuilder:object:root=true
@@ -146,5 +153,5 @@ type DockerMachinePoolList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&DockerMachinePool{}, &DockerMachinePoolList{})
+	objectTypes = append(objectTypes, &DockerMachinePool{}, &DockerMachinePoolList{})
 }

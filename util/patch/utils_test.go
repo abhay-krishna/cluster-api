@@ -22,8 +22,11 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/cluster-api/util/test/builder"
 )
 
 func TestToUnstructured(t *testing.T) {
@@ -39,10 +42,17 @@ func TestToUnstructured(t *testing.T) {
 				Paused: true,
 			},
 		}
-		newObj, err := toUnstructured(obj)
+		gvk := schema.GroupVersionKind{
+			Group:   clusterv1.GroupVersion.Group,
+			Kind:    "Cluster",
+			Version: clusterv1.GroupVersion.Version,
+		}
+		newObj, err := toUnstructured(obj, gvk)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(newObj.GetName()).To(Equal(obj.Name))
 		g.Expect(newObj.GetNamespace()).To(Equal(obj.Namespace))
+		g.Expect(newObj.GetAPIVersion()).To(Equal(clusterv1.GroupVersion.String()))
+		g.Expect(newObj.GetKind()).To(Equal("Cluster"))
 
 		// Change a spec field and validate that it stays the same in the incoming object.
 		g.Expect(unstructured.SetNestedField(newObj.Object, false, "spec", "paused")).To(Succeed())
@@ -55,6 +65,7 @@ func TestToUnstructured(t *testing.T) {
 		obj := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "test.x.y.z/v1",
+				"kind":       "TestKind",
 				"metadata": map[string]interface{}{
 					"name":      "test-1",
 					"namespace": "namespace-1",
@@ -64,11 +75,18 @@ func TestToUnstructured(t *testing.T) {
 				},
 			},
 		}
+		gvk := schema.GroupVersionKind{
+			Group:   "test.x.y.z",
+			Kind:    "TestKind",
+			Version: "v1",
+		}
 
-		newObj, err := toUnstructured(obj)
+		newObj, err := toUnstructured(obj, gvk)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(newObj.GetName()).To(Equal(obj.GetName()))
 		g.Expect(newObj.GetNamespace()).To(Equal(obj.GetNamespace()))
+		g.Expect(newObj.GetAPIVersion()).To(Equal("test.x.y.z/v1"))
+		g.Expect(newObj.GetKind()).To(Equal("TestKind"))
 
 		// Validate that the maps point to different addresses.
 		g.Expect(obj.Object).ToNot(BeIdenticalTo(newObj.Object))
@@ -112,7 +130,7 @@ func TestUnsafeFocusedUnstructured(t *testing.T) {
 			},
 		}
 
-		newObj := unsafeUnstructuredCopy(obj, specPatch, true)
+		newObj := unsafeUnstructuredCopy(obj, specPatch, nil, []string{"status", "conditions"})
 
 		// Validate that common fields are always preserved.
 		g.Expect(newObj.Object["apiVersion"]).To(Equal(obj.Object["apiVersion"]))
@@ -154,7 +172,7 @@ func TestUnsafeFocusedUnstructured(t *testing.T) {
 			},
 		}
 
-		newObj := unsafeUnstructuredCopy(obj, statusPatch, true)
+		newObj := unsafeUnstructuredCopy(obj, statusPatch, nil, []string{"status", "conditions"})
 
 		// Validate that common fields are always preserved.
 		g.Expect(newObj.Object["apiVersion"]).To(Equal(obj.Object["apiVersion"]))
@@ -169,7 +187,7 @@ func TestUnsafeFocusedUnstructured(t *testing.T) {
 
 		// Validate that the status has been copied, without conditions.
 		g.Expect(newObj.Object["status"]).To(HaveLen(1))
-		g.Expect(newObj.Object["status"].(map[string]interface{})["infrastructureReady"]).To(Equal(true))
+		g.Expect(newObj.Object["status"].(map[string]interface{})["infrastructureReady"]).To(BeTrue())
 		g.Expect(newObj.Object["status"].(map[string]interface{})["conditions"]).To(BeNil())
 
 		// When working with conditions, the inner map is going to be removed from the original object.
@@ -203,7 +221,7 @@ func TestUnsafeFocusedUnstructured(t *testing.T) {
 			},
 		}
 
-		newObj := unsafeUnstructuredCopy(obj, statusPatch, false)
+		newObj := unsafeUnstructuredCopy(obj, statusPatch, nil, nil)
 
 		// Validate that spec is nil in the new object, but still exists in the old copy.
 		g.Expect(newObj.Object["spec"]).To(BeNil())
@@ -223,5 +241,61 @@ func TestUnsafeFocusedUnstructured(t *testing.T) {
 
 		// Make sure that we didn't modify the incoming object if this object isn't a condition setter.
 		g.Expect(obj.Object["status"].(map[string]interface{})["conditions"]).ToNot(BeNil())
+	})
+}
+
+func TestIdentifyConditionsFieldsPath(t *testing.T) {
+	t.Run("v1beta1 object with conditions (phase 0)", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &builder.Phase0Obj{}
+		metav1ConditionsFields, clusterv1ConditionsFields, err := identifyConditionsFieldsPath(obj)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(metav1ConditionsFields).To(BeEmpty())
+		g.Expect(clusterv1ConditionsFields).To(Equal([]string{"status", "conditions"}))
+	})
+	t.Run("v1beta1 object with both clusterv1.conditions and metav1.conditions (phase 1)", func(t *testing.T) {
+		g := NewWithT(t)
+
+		tests := []struct {
+			obj runtime.Object
+		}{
+			{obj: &builder.Phase1Obj{}},
+			{obj: &builder.Phase1Obj{Status: builder.Phase1ObjStatus{V1Beta2: nil}}},
+			{obj: &builder.Phase1Obj{Status: builder.Phase1ObjStatus{V1Beta2: &builder.Phase1ObjStatusV1Beta2{Conditions: nil}}}},
+		}
+		for _, tt := range tests {
+			metav1ConditionsFields, clusterv1ConditionsFields, err := identifyConditionsFieldsPath(tt.obj)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(metav1ConditionsFields).To(Equal([]string{"status", "v1beta2", "conditions"}))
+			g.Expect(clusterv1ConditionsFields).To(Equal([]string{"status", "conditions"}))
+		}
+	})
+	t.Run("v1beta2 object with both clusterv1.conditions and metav1.conditions conditions (phase 2)", func(t *testing.T) {
+		g := NewWithT(t)
+
+		tests := []struct {
+			obj runtime.Object
+		}{
+			{obj: &builder.Phase2Obj{}},
+			{obj: &builder.Phase2Obj{Status: builder.Phase2ObjStatus{Deprecated: nil}}},
+			{obj: &builder.Phase2Obj{Status: builder.Phase2ObjStatus{Deprecated: &builder.Phase2ObjStatusDeprecated{V1Beta1: nil}}}},
+			{obj: &builder.Phase2Obj{Status: builder.Phase2ObjStatus{Deprecated: &builder.Phase2ObjStatusDeprecated{V1Beta1: &builder.Phase2ObjStatusDeprecatedV1Beta1{Conditions: nil}}}}},
+		}
+		for _, tt := range tests {
+			metav1ConditionsFields, clusterv1ConditionsFields, err := identifyConditionsFieldsPath(tt.obj)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(metav1ConditionsFields).To(Equal([]string{"status", "conditions"}))
+			g.Expect(clusterv1ConditionsFields).To(Equal([]string{"status", "deprecated", "v1beta1", "conditions"}))
+		}
+	})
+	t.Run("v1beta2 object with metav1.conditions (phase 3)", func(t *testing.T) {
+		g := NewWithT(t)
+
+		obj := &builder.Phase3Obj{}
+		metav1ConditionsFields, clusterv1ConditionsFields, err := identifyConditionsFieldsPath(obj)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(metav1ConditionsFields).To(Equal([]string{"status", "conditions"}))
+		g.Expect(clusterv1ConditionsFields).To(BeEmpty())
 	})
 }

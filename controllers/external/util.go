@@ -25,13 +25,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apiserver/pkg/storage/names"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 // Get uses the client and reference to get an external, unstructured object.
-func Get(ctx context.Context, c client.Reader, ref *corev1.ObjectReference, namespace string) (*unstructured.Unstructured, error) {
+func Get(ctx context.Context, c client.Reader, ref *corev1.ObjectReference) (*unstructured.Unstructured, error) {
 	if ref == nil {
 		return nil, errors.Errorf("cannot get object - object reference not set")
 	}
@@ -39,9 +40,9 @@ func Get(ctx context.Context, c client.Reader, ref *corev1.ObjectReference, name
 	obj.SetAPIVersion(ref.APIVersion)
 	obj.SetKind(ref.Kind)
 	obj.SetName(ref.Name)
-	key := client.ObjectKey{Name: obj.GetName(), Namespace: namespace}
-	if err := c.Get(ctx, key, obj); err != nil {
-		return nil, errors.Wrapf(err, "failed to retrieve %s external object %q/%q", obj.GetKind(), key.Namespace, key.Name)
+	obj.SetNamespace(ref.Namespace)
+	if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return nil, errors.Wrapf(err, "failed to retrieve %s %s", obj.GetKind(), klog.KRef(ref.Namespace, ref.Name))
 	}
 	return obj, nil
 }
@@ -54,13 +55,13 @@ func Delete(ctx context.Context, c client.Writer, ref *corev1.ObjectReference) e
 	obj.SetName(ref.Name)
 	obj.SetNamespace(ref.Namespace)
 	if err := c.Delete(ctx, obj); err != nil {
-		return errors.Wrapf(err, "failed to delete %s external object %q/%q", obj.GetKind(), obj.GetNamespace(), obj.GetName())
+		return errors.Wrapf(err, "failed to delete %s %s", obj.GetKind(), klog.KRef(ref.Namespace, ref.Name))
 	}
 	return nil
 }
 
-// CloneTemplateInput is the input to CloneTemplate.
-type CloneTemplateInput struct {
+// CreateFromTemplateInput is the input to CreateFromTemplate.
+type CreateFromTemplateInput struct {
 	// Client is the controller runtime client.
 	Client client.Client
 
@@ -69,6 +70,10 @@ type CloneTemplateInput struct {
 
 	// Namespace is the Kubernetes namespace the cloned object should be created into.
 	Namespace string
+
+	// Name is used as the name of the generated object, if set.
+	// If it isn't set the template name will be used as prefix to generate a name instead.
+	Name string
 
 	// ClusterName is the cluster this object is linked to.
 	ClusterName string
@@ -86,9 +91,9 @@ type CloneTemplateInput struct {
 	Annotations map[string]string
 }
 
-// CloneTemplate uses the client and the reference to create a new object from the template.
-func CloneTemplate(ctx context.Context, in *CloneTemplateInput) (*corev1.ObjectReference, error) {
-	from, err := Get(ctx, in.Client, in.TemplateRef, in.Namespace)
+// CreateFromTemplate uses the client and the reference to create a new object from the template.
+func CreateFromTemplate(ctx context.Context, in *CreateFromTemplateInput) (*corev1.ObjectReference, error) {
+	from, err := Get(ctx, in.Client, in.TemplateRef)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +101,7 @@ func CloneTemplate(ctx context.Context, in *CloneTemplateInput) (*corev1.ObjectR
 		Template:    from,
 		TemplateRef: in.TemplateRef,
 		Namespace:   in.Namespace,
+		Name:        in.Name,
 		ClusterName: in.ClusterName,
 		OwnerRef:    in.OwnerRef,
 		Labels:      in.Labels,
@@ -124,6 +130,10 @@ type GenerateTemplateInput struct {
 
 	// Namespace is the Kubernetes namespace the cloned object should be created into.
 	Namespace string
+
+	// Name is used as the name of the generated object, if set.
+	// If it isn't set the template name will be used as prefix to generate a name instead.
+	Name string
 
 	// ClusterName is the cluster this object is linked to.
 	ClusterName string
@@ -156,7 +166,10 @@ func GenerateTemplate(in *GenerateTemplateInput) (*unstructured.Unstructured, er
 	to.SetFinalizers(nil)
 	to.SetUID("")
 	to.SetSelfLink("")
-	to.SetName(names.SimpleNameGenerator.GenerateName(in.Template.GetName() + "-"))
+	to.SetName(in.Name)
+	if to.GetName() == "" {
+		to.SetName(names.SimpleNameGenerator.GenerateName(in.Template.GetName() + "-"))
+	}
 	to.SetNamespace(in.Namespace)
 
 	// Set annotations.
@@ -179,7 +192,7 @@ func GenerateTemplate(in *GenerateTemplateInput) (*unstructured.Unstructured, er
 	for key, value := range in.Labels {
 		labels[key] = value
 	}
-	labels[clusterv1.ClusterLabelName] = in.ClusterName
+	labels[clusterv1.ClusterNameLabel] = in.ClusterName
 	to.SetLabels(labels)
 
 	// Set the owner reference.
@@ -243,4 +256,43 @@ func IsInitialized(obj *unstructured.Unstructured) (bool, error) {
 			obj.GroupVersionKind(), obj.GetName())
 	}
 	return initialized && found, nil
+}
+
+func GetExternalEtcdEndpoints(externalEtcd *unstructured.Unstructured) (string, bool, error) {
+	endpoints, found, err := unstructured.NestedString(externalEtcd.Object, "status", "endpoints")
+	if err != nil {
+		return "", false, errors.Wrapf(err, "failed to get external etcd endpoints from %v %q", externalEtcd.GroupVersionKind(),
+			externalEtcd.GetName())
+	}
+
+	return endpoints, found, nil
+}
+
+func IsExternalEtcdUpgrading(externalEtcd *unstructured.Unstructured) (bool, error) {
+	annotations, hasAnnotations, err := unstructured.NestedStringMap(externalEtcd.Object, "metadata", "annotations")
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to check if external etcd is undergoing upgrade %v %q", externalEtcd.GroupVersionKind(),
+			externalEtcd.GetName())
+	}
+
+	if !hasAnnotations {
+		return false, nil
+	}
+
+	_, hasUpgradingAnnotation := annotations["etcdcluster.cluster.x-k8s.io/upgrading"]
+	return hasUpgradingAnnotation, nil
+}
+
+func SetKCPUpdateCompleteAnnotationOnEtcdadmCluster(externalEtcd *unstructured.Unstructured) error {
+	annotations, hasAnnotations, err := unstructured.NestedStringMap(externalEtcd.Object, "metadata", "annotations")
+	if err != nil {
+		return errors.Wrapf(err, "failed to update external etcd annotation after controlplane upgrade completed %v %q", externalEtcd.GroupVersionKind(),
+			externalEtcd.GetName())
+	}
+
+	if !hasAnnotations {
+		annotations = make(map[string]string)
+	}
+	annotations[clusterv1.ControlPlaneUpgradeCompletedAnnotation] = "true"
+	return unstructured.SetNestedStringMap(externalEtcd.UnstructuredContent(), annotations, "metadata", "annotations")
 }

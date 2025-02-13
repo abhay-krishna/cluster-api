@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -53,6 +54,17 @@ type DockerClusterSpec struct {
 type DockerLoadBalancer struct {
 	// ImageMeta allows customizing the image used for the cluster load balancer.
 	ImageMeta `json:",inline"`
+
+	// CustomHAProxyConfigTemplateRef allows you to replace the default HAProxy config file.
+	// This field is a reference to a config map that contains the configuration template. The key of the config map should be equal to 'value'.
+	// The content of the config map will be processed and will replace the default HAProxy config file. Please use it with caution, as there are
+	// no checks to ensure the validity of the configuration. This template will support the following variables that will be passed by the controller:
+	// $IPv6 (bool) indicates if the cluster is IPv6, $FrontendControlPlanePort (string) indicates the frontend control plane port,
+	// $BackendControlPlanePort (string) indicates the backend control plane port, $BackendServers (map[string]string) indicates the backend server
+	// where the key is the server name and the value is the address. This map is dynamic and is updated every time a new control plane
+	// node is added or removed. The template will also support the JoinHostPort function to join the host and port of the backend server.
+	// +optional
+	CustomHAProxyConfigTemplateRef *corev1.LocalObjectReference `json:"customHAProxyConfigTemplateRef,omitempty"`
 }
 
 // ImageMeta allows customizing the image used for components that are not
@@ -83,6 +95,22 @@ type DockerClusterStatus struct {
 	// Conditions defines current service state of the DockerCluster.
 	// +optional
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+
+	// v1beta2 groups all the fields that will be added or modified in DockerCluster's's status with the V1Beta2 version.
+	// +optional
+	V1Beta2 *DockerClusterV1Beta2Status `json:"v1beta2,omitempty"`
+}
+
+// DockerClusterV1Beta2Status groups all the fields that will be added or modified in DockerCluster with the V1Beta2 version.
+// See https://github.com/kubernetes-sigs/cluster-api/blob/main/docs/proposals/20240916-improve-status-in-CAPI-resources.md for more context.
+type DockerClusterV1Beta2Status struct {
+	// conditions represents the observations of a DockerCluster's current state.
+	// Known condition types are Ready, LoadBalancerAvailable, Deleting, Paused.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +kubebuilder:validation:MaxItems=32
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // APIEndpoint represents a reachable Kubernetes API endpoint.
@@ -91,6 +119,7 @@ type APIEndpoint struct {
 	Host string `json:"host"`
 
 	// Port is the port on which the API server is serving.
+	// Defaults to 6443 if not set.
 	Port int `json:"port"`
 }
 
@@ -120,6 +149,22 @@ func (c *DockerCluster) SetConditions(conditions clusterv1.Conditions) {
 	c.Status.Conditions = conditions
 }
 
+// GetV1Beta2Conditions returns the set of conditions for this object.
+func (c *DockerCluster) GetV1Beta2Conditions() []metav1.Condition {
+	if c.Status.V1Beta2 == nil {
+		return nil
+	}
+	return c.Status.V1Beta2.Conditions
+}
+
+// SetV1Beta2Conditions sets conditions for an API object.
+func (c *DockerCluster) SetV1Beta2Conditions(conditions []metav1.Condition) {
+	if c.Status.V1Beta2 == nil {
+		c.Status.V1Beta2 = &DockerClusterV1Beta2Status{}
+	}
+	c.Status.V1Beta2.Conditions = conditions
+}
+
 // +kubebuilder:object:root=true
 
 // DockerClusterList contains a list of DockerCluster.
@@ -130,5 +175,5 @@ type DockerClusterList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&DockerCluster{}, &DockerClusterList{})
+	objectTypes = append(objectTypes, &DockerCluster{}, &DockerClusterList{})
 }

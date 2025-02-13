@@ -2,22 +2,36 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
   - secrets
   verbs:
   - get
   - list
   - watch
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
   - cluster.x-k8s.io
   resources:
   - clusters
-  - machines
+  - machinepools
+  - machinepools/status
+  - machinesets
   verbs:
   - get
   - list
@@ -25,9 +39,9 @@ rules:
 - apiGroups:
   - cluster.x-k8s.io
   resources:
-  - machinepools
-  - machinepools/status
+  - machines
   verbs:
+  - delete
   - get
   - list
   - watch
@@ -35,6 +49,8 @@ rules:
   - infrastructure.cluster.x-k8s.io
   resources:
   - dockerclusters
+  - dockermachinepools
+  - dockermachines
   verbs:
   - create
   - delete
@@ -48,46 +64,8 @@ rules:
   resources:
   - dockerclusters/finalizers
   - dockerclusters/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
-  - dockermachinepools
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
   - dockermachinepools/finalizers
   - dockermachinepools/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
-  - dockermachines
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
   - dockermachines/finalizers
   - dockermachines/status
   verbs:

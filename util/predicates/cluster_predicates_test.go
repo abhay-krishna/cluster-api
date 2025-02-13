@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -31,7 +32,7 @@ import (
 
 func TestClusterControlplaneInitializedPredicate(t *testing.T) {
 	g := NewWithT(t)
-	predicate := predicates.ClusterControlPlaneInitialized(logr.New(log.NullLogSink{}))
+	predicate := predicates.ClusterControlPlaneInitialized(runtime.NewScheme(), logr.New(log.NullLogSink{}))
 
 	markedFalse := clusterv1.Cluster{}
 	conditions.MarkFalse(&markedFalse, clusterv1.ControlPlaneInitializedCondition, clusterv1.MissingNodeRefReason, clusterv1.ConditionSeverityWarning, "")
@@ -85,8 +86,9 @@ func TestClusterControlplaneInitializedPredicate(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+	for i := range testcases {
+		tc := testcases[i]
+		t.Run(tc.name, func(*testing.T) {
 			ev := event.UpdateEvent{
 				ObjectOld: &tc.oldCluster,
 				ObjectNew: &tc.newCluster,
